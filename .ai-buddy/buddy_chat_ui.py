@@ -27,6 +27,7 @@ def check_agent_health():
 
 def print_welcome():
     """Print welcome message and instructions."""
+    timeout = int(os.getenv("AI_BUDDY_TIMEOUT", "60"))
     print("=" * 60)
     print("🤖 AI Coding Buddy Chat")
     print("=" * 60)
@@ -37,6 +38,7 @@ def print_welcome():
     print("  - 'clear' to clear the screen")
     print("  - 'help' for this message")
     print("  - 'status' to check monitoring agent status")
+    print(f"\nTimeout: {timeout}s (set AI_BUDDY_TIMEOUT env var to change)")
     print("=" * 60)
     print()
 
@@ -66,35 +68,64 @@ def format_response(response_text):
     return '\n'.join(formatted_lines)
 
 def wait_for_response():
-    """Wait for response with animated indicator."""
+    """Wait for response with animated indicator and progress feedback."""
     animation = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"]
     idx = 0
     start_time = time.time()
     last_health_check = time.time()
+    last_progress_update = time.time()
     
-    print("\n💭 Thinking", end='', flush=True)
+    # Configurable timeout (default 60 seconds)
+    timeout = int(os.getenv("AI_BUDDY_TIMEOUT", "60"))
+    
+    print("\n💭 Processing", end='', flush=True)
     
     while not os.path.exists(RESPONSE_FILE):
+        elapsed = int(time.time() - start_time)
+        
         # Check agent health every 2 seconds
         if time.time() - last_health_check > 2:
             if not check_agent_health():
-                print("\r⚠️  Monitoring agent appears to be down!                    ", flush=True)
+                print(f"\r❌ Monitoring agent is down after {elapsed}s!                    ", flush=True)
                 return False
             last_health_check = time.time()
         
-        # Check if still processing
-        if os.path.exists(PROCESSING_FILE):
-            print(f"\r💭 Thinking {animation[idx % len(animation)]}", end='', flush=True)
-            idx += 1
-        else:
-            # If no processing file and it's been more than 5 seconds, assume lost
-            if time.time() - start_time > 5:
-                print("\r⚠️  Request might have been lost or agent is not responding.     ", flush=True)
+        # Update progress every second
+        if time.time() - last_progress_update >= 1:
+            if os.path.exists(PROCESSING_FILE):
+                # Show different messages based on elapsed time
+                if elapsed < 10:
+                    status = "Processing"
+                elif elapsed < 20:
+                    status = "Still processing"
+                elif elapsed < 30:
+                    status = "Taking a bit longer"
+                else:
+                    status = "Complex request"
+                
+                print(f"\r💭 {status} {animation[idx % len(animation)]} ({elapsed}s)", end='', flush=True)
+                idx += 1
+            else:
+                # Processing file missing but agent is healthy - still waiting for it to start
+                print(f"\r⏳ Waiting for processing to start ({elapsed}s)", end='', flush=True)
+            
+            last_progress_update = time.time()
+        
+        # Only timeout if we've exceeded the limit AND there's no processing happening
+        if elapsed > timeout:
+            if os.path.exists(PROCESSING_FILE):
+                # Still processing, give it more time
+                if elapsed > timeout * 2:
+                    print(f"\r⚠️  Request timed out after {elapsed}s (processing was still active)     ", flush=True)
+                    return False
+            else:
+                print(f"\r⚠️  Request timed out after {elapsed}s (no processing detected)     ", flush=True)
                 return False
         
         time.sleep(0.1)
     
-    print("\r✓ Response received!                    ", flush=True)
+    elapsed = int(time.time() - start_time)
+    print(f"\r✓ Response received after {elapsed}s!                    ", flush=True)
     return True
 
 def main():

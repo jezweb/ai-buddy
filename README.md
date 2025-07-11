@@ -127,6 +127,10 @@ your-project/
 The system uses environment variables for configuration. Copy `.ai-buddy/.env.example` to `.ai-buddy/.env` and set:
 
 - `GEMINI_API_KEY`: Your Google Gemini API key
+- `AI_BUDDY_TIMEOUT`: Response timeout in seconds (default: 60). Increase for complex requests
+  ```bash
+  export AI_BUDDY_TIMEOUT=120  # Wait up to 2 minutes for responses
+  ```
 
 ## Platform Support
 
