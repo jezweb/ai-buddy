@@ -80,22 +80,23 @@ if [ "$USE_VENV" = true ]; then
         $PYTHON_CMD -m venv "$VENV_DIR"
     fi
     
-    # Activate virtual environment
-    if [ -f "$VENV_DIR/bin/activate" ]; then
-        source "$VENV_DIR/bin/activate"
-    elif [ -f "$VENV_DIR/Scripts/activate" ]; then
-        source "$VENV_DIR/Scripts/activate"
+    # Use the virtual environment's Python directly
+    if [ -f "$VENV_DIR/bin/python" ]; then
+        PYTHON_CMD="$VENV_DIR/bin/python"
+    elif [ -f "$VENV_DIR/Scripts/python.exe" ]; then
+        PYTHON_CMD="$VENV_DIR/Scripts/python.exe"
     else
-        echo -e "${RED}❌ Error: Could not activate virtual environment.${NC}"
+        echo -e "${RED}❌ Error: Could not find Python in virtual environment.${NC}"
         exit 1
     fi
-    echo -e "✓ Virtual environment activated"
+    echo -e "✓ Virtual environment ready"
 fi
 
 # Install dependencies
 echo ""
 echo -e "${YELLOW}Installing Python dependencies...${NC}"
-pip install -q -r "$SCRIPT_DIR/requirements.txt"
+# Use python -m pip to ensure we're using the right pip
+$PYTHON_CMD -m pip install -q -r "$SCRIPT_DIR/requirements.txt"
 echo -e "✓ Dependencies installed"
 
 # Setup .env file
