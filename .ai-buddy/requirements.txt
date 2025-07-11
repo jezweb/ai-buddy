@@ -1,0 +1,11 @@
+# Google Gemini AI SDK (new unified SDK)
+google-genai>=0.1.0
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# Optional: For better async performance
+# google-genai[aiohttp]
+
+# Note: The old google-generativeai package is deprecated.
+# This project uses the new google-genai SDK.
