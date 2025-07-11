@@ -137,6 +137,49 @@ if [ "$UPDATE_KEY" = true ]; then
     fi
 fi
 
+# Ensure .env has all configuration options from .env.example
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    # Check if .env is missing any configuration options
+    if ! grep -q "AI_BUDDY_TIMEOUT" "$SCRIPT_DIR/.env" 2>/dev/null; then
+        echo ""
+        echo -e "${YELLOW}Updating .env with new configuration options...${NC}"
+        
+        # Create a temporary file with existing values
+        TEMP_ENV="$SCRIPT_DIR/.env.tmp"
+        
+        # Extract existing values
+        EXISTING_API_KEY=$(grep "^GEMINI_API_KEY=" "$SCRIPT_DIR/.env" 2>/dev/null || echo "")
+        EXISTING_MODEL=$(grep "^GEMINI_MODEL=" "$SCRIPT_DIR/.env" 2>/dev/null || echo "")
+        EXISTING_SESSIONS=$(grep "^SESSIONS_DIR=" "$SCRIPT_DIR/.env" 2>/dev/null || echo "")
+        EXISTING_POLLING=$(grep "^POLLING_INTERVAL=" "$SCRIPT_DIR/.env" 2>/dev/null || echo "")
+        EXISTING_TIMEOUT=$(grep "^AI_BUDDY_TIMEOUT=" "$SCRIPT_DIR/.env" 2>/dev/null || echo "")
+        
+        # Copy template
+        cp "$SCRIPT_DIR/.env.example" "$TEMP_ENV"
+        
+        # Restore existing values
+        if [ ! -z "$EXISTING_API_KEY" ]; then
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                sed -i '' "s/^GEMINI_API_KEY=.*/$(echo "$EXISTING_API_KEY" | sed 's/[[\/.*]/\\&/g')/" "$TEMP_ENV"
+            else
+                sed -i "s/^GEMINI_API_KEY=.*/$(echo "$EXISTING_API_KEY" | sed 's/[[\/.*]/\\&/g')/" "$TEMP_ENV"
+            fi
+        fi
+        
+        if [ ! -z "$EXISTING_MODEL" ]; then
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                sed -i '' "s/^# GEMINI_MODEL=.*/$(echo "$EXISTING_MODEL" | sed 's/[[\/.*]/\\&/g')/" "$TEMP_ENV"
+            else
+                sed -i "s/^# GEMINI_MODEL=.*/$(echo "$EXISTING_MODEL" | sed 's/[[\/.*]/\\&/g')/" "$TEMP_ENV"
+            fi
+        fi
+        
+        # Move temp file to .env
+        mv "$TEMP_ENV" "$SCRIPT_DIR/.env"
+        echo -e "${GREEN}✓ Configuration file updated with all options${NC}"
+    fi
+fi
+
 # Make scripts executable
 echo ""
 echo -e "${YELLOW}Setting up permissions...${NC}"
