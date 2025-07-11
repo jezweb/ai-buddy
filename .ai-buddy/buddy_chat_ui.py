@@ -12,7 +12,12 @@ PROCESSING_FILE = os.path.join(SESSIONS_DIR, "buddy_processing.tmp")
 HEARTBEAT_FILE = os.path.join(SESSIONS_DIR, "buddy_heartbeat.tmp")
 
 def check_agent_health():
-    """Check if monitoring agent is alive by checking heartbeat."""
+    """Check if monitoring agent is alive by checking heartbeat and processing state."""
+    # If actively processing, consider healthy regardless of heartbeat
+    if os.path.exists(PROCESSING_FILE):
+        return True
+    
+    # Check heartbeat file
     if not os.path.exists(HEARTBEAT_FILE):
         return False
     
@@ -20,8 +25,9 @@ def check_agent_health():
         with open(HEARTBEAT_FILE, 'r') as f:
             last_heartbeat = float(f.read().strip())
         
-        # Consider agent healthy if heartbeat is less than 10 seconds old
-        return (time.time() - last_heartbeat) < 10
+        # Consider agent healthy if heartbeat is less than 15 seconds old (was 10)
+        # This gives more time for heartbeat updates during heavy processing
+        return (time.time() - last_heartbeat) < 15
     except:
         return False
 
@@ -74,6 +80,7 @@ def wait_for_response():
     start_time = time.time()
     last_health_check = time.time()
     last_progress_update = time.time()
+    consecutive_health_failures = 0
     
     # Configurable timeout (default 60 seconds)
     timeout = int(os.getenv("AI_BUDDY_TIMEOUT", "60"))
@@ -86,8 +93,13 @@ def wait_for_response():
         # Check agent health every 2 seconds
         if time.time() - last_health_check > 2:
             if not check_agent_health():
-                print(f"\r❌ Monitoring agent is down after {elapsed}s!                    ", flush=True)
-                return False
+                consecutive_health_failures += 1
+                # Only declare agent down after 3 consecutive failures (6 seconds)
+                if consecutive_health_failures >= 3:
+                    print(f"\r❌ Monitoring agent is not responding after {elapsed}s!                    ", flush=True)
+                    return False
+            else:
+                consecutive_health_failures = 0  # Reset on successful check
             last_health_check = time.time()
         
         # Update progress every second
@@ -163,12 +175,32 @@ def main():
                 print_welcome()
                 continue
             elif prompt.lower() == 'status':
-                if check_agent_health():
-                    print("\n✅ Monitoring agent is running and healthy")
+                print("\n🔍 Checking system status...")
+                
+                # Check processing state
+                if os.path.exists(PROCESSING_FILE):
+                    print("⚡ Currently processing a request")
+                
+                # Check heartbeat
+                if os.path.exists(HEARTBEAT_FILE):
+                    try:
+                        with open(HEARTBEAT_FILE, 'r') as f:
+                            last_heartbeat = float(f.read().strip())
+                        age = int(time.time() - last_heartbeat)
+                        if age < 15:
+                            print(f"✅ Monitoring agent is healthy (heartbeat: {age}s ago)")
+                        else:
+                            print(f"⚠️  Monitoring agent heartbeat is stale ({age}s ago)")
+                    except:
+                        print("⚠️  Could not read heartbeat file")
                 else:
-                    print("\n❌ Monitoring agent appears to be down!")
-                    print("   Check the terminal where you started the session.")
-                    print("   You may need to restart the AI Buddy session.")
+                    print("❌ No heartbeat file found - agent may not be running")
+                
+                # Check for recent logs
+                log_files = sorted([f for f in os.listdir(SESSIONS_DIR) if f.startswith("monitoring_agent_") and f.endswith(".log")])
+                if log_files:
+                    print(f"📄 Latest log: {log_files[-1]}")
+                
                 continue
             elif not prompt:
                 continue

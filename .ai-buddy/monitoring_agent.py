@@ -87,6 +87,10 @@ def main(context_file, log_file):
             os.remove(temp_file)
             logging.info(f"Cleaned up stale file: {temp_file}")
     
+    # Create initial heartbeat immediately
+    update_heartbeat()
+    logging.info("Initial heartbeat created")
+    
     # Main processing loop
     consecutive_errors = 0
     last_heartbeat = time.time()
