@@ -3,6 +3,9 @@ import time
 import os
 import argparse
 import sys
+import logging
+import traceback
+from datetime import datetime
 from pathlib import Path
 from google import genai
 from config import GEMINI_API_KEY, GEMINI_MODEL, SESSIONS_DIR, POLLING_INTERVAL
@@ -11,6 +14,26 @@ from config import GEMINI_API_KEY, GEMINI_MODEL, SESSIONS_DIR, POLLING_INTERVAL
 REQUEST_FILE = os.path.join(SESSIONS_DIR, "buddy_request.tmp")
 RESPONSE_FILE = os.path.join(SESSIONS_DIR, "buddy_response.tmp")
 PROCESSING_FILE = os.path.join(SESSIONS_DIR, "buddy_processing.tmp")
+HEARTBEAT_FILE = os.path.join(SESSIONS_DIR, "buddy_heartbeat.tmp")
+
+# Setup logging
+LOG_FILE = os.path.join(SESSIONS_DIR, f"monitoring_agent_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+def update_heartbeat():
+    """Update heartbeat file to indicate agent is alive."""
+    try:
+        with open(HEARTBEAT_FILE, 'w') as f:
+            f.write(str(time.time()))
+    except Exception as e:
+        logging.error(f"Failed to update heartbeat: {e}")
 
 def read_file_safely(file_path, max_size=10*1024*1024):  # 10MB limit
     """Read file with size limit to prevent memory issues."""
@@ -28,33 +51,53 @@ def read_file_safely(file_path, max_size=10*1024*1024):  # 10MB limit
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 return f.read()
     except Exception as e:
+        logging.error(f"Error reading file {file_path}: {e}")
         return f"[Error reading file: {e}]"
 
 def main(context_file, log_file):
-    print(f"Monitoring Agent Started. PID: {os.getpid()}")
-    print(f"Watching context: {context_file}")
-    print(f"Watching log: {log_file}")
-    print(f"Using model: {GEMINI_MODEL}")
-    print(f"Polling interval: {POLLING_INTERVAL}s")
+    logging.info(f"Monitoring Agent Started. PID: {os.getpid()}")
+    logging.info(f"Watching context: {context_file}")
+    logging.info(f"Watching log: {log_file}")
+    logging.info(f"Using model: {GEMINI_MODEL}")
+    logging.info(f"Polling interval: {POLLING_INTERVAL}s")
+    logging.info(f"Log file: {LOG_FILE}")
     
     # Initialize Gemini client with new SDK
-    try:
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        print("✓ Gemini client initialized successfully")
-    except Exception as e:
-        print(f"✗ Failed to initialize Gemini client: {e}")
-        sys.exit(1)
+    client = None
+    retry_count = 0
+    while retry_count < 3:
+        try:
+            client = genai.Client(api_key=GEMINI_API_KEY)
+            logging.info("✓ Gemini client initialized successfully")
+            break
+        except Exception as e:
+            retry_count += 1
+            logging.error(f"Failed to initialize Gemini client (attempt {retry_count}/3): {e}")
+            if retry_count >= 3:
+                logging.critical("Failed to initialize Gemini client after 3 attempts. Exiting.")
+                sys.exit(1)
+            time.sleep(2)
     
     # Ensure sessions directory exists
     os.makedirs(SESSIONS_DIR, exist_ok=True)
     
     # Clean up any stale files
-    for temp_file in [REQUEST_FILE, RESPONSE_FILE, PROCESSING_FILE]:
+    for temp_file in [REQUEST_FILE, RESPONSE_FILE, PROCESSING_FILE, HEARTBEAT_FILE]:
         if os.path.exists(temp_file):
             os.remove(temp_file)
+            logging.info(f"Cleaned up stale file: {temp_file}")
+    
+    # Main processing loop
+    consecutive_errors = 0
+    last_heartbeat = time.time()
     
     while True:
         try:
+            # Update heartbeat every 5 seconds
+            if time.time() - last_heartbeat > 5:
+                update_heartbeat()
+                last_heartbeat = time.time()
+            
             # Wait for the UI to create a request file
             if os.path.exists(REQUEST_FILE):
                 # Create processing indicator
@@ -64,6 +107,7 @@ def main(context_file, log_file):
                 user_question = read_file_safely(REQUEST_FILE)
                 os.remove(REQUEST_FILE)
                 
+                logging.info(f"Request received: {user_question[:100]}...")
                 print(f"\n  -> Request received: {user_question[:100]}...")
                 print("  -> Processing with Gemini...")
                 
@@ -111,15 +155,20 @@ Please provide a thoughtful, actionable response that considers both the project
                     with open(RESPONSE_FILE, 'w', encoding='utf-8') as f:
                         f.write(response_text)
                     
+                    logging.info("Response sent to UI successfully")
                     print("  -> Response sent to UI")
+                    consecutive_errors = 0  # Reset error counter on success
                     
                 except Exception as e:
                     # Write error message for UI
                     error_msg = f"Error processing request: {type(e).__name__}: {str(e)}"
+                    logging.error(f"{error_msg}\n{traceback.format_exc()}")
                     print(f"  ✗ {error_msg}")
                     
                     with open(RESPONSE_FILE, 'w', encoding='utf-8') as f:
-                        f.write(f"⚠️ {error_msg}\n\nPlease check:\n1. Your API key is valid\n2. You have internet connectivity\n3. The Gemini API is accessible\n4. Your request doesn't exceed token limits")
+                        f.write(f"⚠️ {error_msg}\n\nPlease check:\n1. Your API key is valid\n2. You have internet connectivity\n3. The Gemini API is accessible\n4. Your request doesn't exceed token limits\n\nCheck the log file for details: {LOG_FILE}")
+                    
+                    consecutive_errors += 1
                 
                 finally:
                     # Remove processing indicator
@@ -129,17 +178,29 @@ Please provide a thoughtful, actionable response that considers both the project
             time.sleep(POLLING_INTERVAL)
             
         except KeyboardInterrupt:
+            logging.info("Received interrupt signal, shutting down gracefully")
             print("\n  -> Monitoring agent shutting down...")
             break
         except Exception as e:
+            consecutive_errors += 1
+            logging.error(f"Unexpected error in main loop: {e}\n{traceback.format_exc()}")
             print(f"  ✗ Unexpected error in main loop: {e}")
-            time.sleep(POLLING_INTERVAL)
+            
+            # If too many consecutive errors, exit to avoid infinite error loop
+            if consecutive_errors > 10:
+                logging.critical(f"Too many consecutive errors ({consecutive_errors}), exiting")
+                print(f"  ✗ Too many consecutive errors ({consecutive_errors}), exiting")
+                sys.exit(1)
+            
+            time.sleep(POLLING_INTERVAL * 2)  # Wait longer after errors
     
     # Cleanup on exit
-    for temp_file in [REQUEST_FILE, RESPONSE_FILE, PROCESSING_FILE]:
+    for temp_file in [REQUEST_FILE, RESPONSE_FILE, PROCESSING_FILE, HEARTBEAT_FILE]:
         if os.path.exists(temp_file):
             os.remove(temp_file)
+            logging.info(f"Cleaned up {temp_file}")
     
+    logging.info("Monitoring agent stopped")
     print("  -> Monitoring agent stopped.")
 
 if __name__ == "__main__":

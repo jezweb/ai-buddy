@@ -2,12 +2,28 @@
 import os
 import time
 import sys
+import subprocess
 from pathlib import Path
 from config import SESSIONS_DIR
 
 REQUEST_FILE = os.path.join(SESSIONS_DIR, "buddy_request.tmp")
 RESPONSE_FILE = os.path.join(SESSIONS_DIR, "buddy_response.tmp")
 PROCESSING_FILE = os.path.join(SESSIONS_DIR, "buddy_processing.tmp")
+HEARTBEAT_FILE = os.path.join(SESSIONS_DIR, "buddy_heartbeat.tmp")
+
+def check_agent_health():
+    """Check if monitoring agent is alive by checking heartbeat."""
+    if not os.path.exists(HEARTBEAT_FILE):
+        return False
+    
+    try:
+        with open(HEARTBEAT_FILE, 'r') as f:
+            last_heartbeat = float(f.read().strip())
+        
+        # Consider agent healthy if heartbeat is less than 10 seconds old
+        return (time.time() - last_heartbeat) < 10
+    except:
+        return False
 
 def print_welcome():
     """Print welcome message and instructions."""
@@ -20,6 +36,7 @@ def print_welcome():
     print("  - 'exit' or 'quit' to close")
     print("  - 'clear' to clear the screen")
     print("  - 'help' for this message")
+    print("  - 'status' to check monitoring agent status")
     print("=" * 60)
     print()
 
@@ -52,18 +69,29 @@ def wait_for_response():
     """Wait for response with animated indicator."""
     animation = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"]
     idx = 0
+    start_time = time.time()
+    last_health_check = time.time()
     
     print("\n💭 Thinking", end='', flush=True)
     
     while not os.path.exists(RESPONSE_FILE):
+        # Check agent health every 2 seconds
+        if time.time() - last_health_check > 2:
+            if not check_agent_health():
+                print("\r⚠️  Monitoring agent appears to be down!                    ", flush=True)
+                return False
+            last_health_check = time.time()
+        
         # Check if still processing
         if os.path.exists(PROCESSING_FILE):
             print(f"\r💭 Thinking {animation[idx % len(animation)]}", end='', flush=True)
             idx += 1
         else:
-            # Request might have been lost
-            print("\r⚠️  Request might have been lost. Retrying...     ", flush=True)
-            return False
+            # If no processing file and it's been more than 5 seconds, assume lost
+            if time.time() - start_time > 5:
+                print("\r⚠️  Request might have been lost or agent is not responding.     ", flush=True)
+                return False
+        
         time.sleep(0.1)
     
     print("\r✓ Response received!                    ", flush=True)
@@ -103,6 +131,14 @@ def main():
             elif prompt.lower() == 'help':
                 print_welcome()
                 continue
+            elif prompt.lower() == 'status':
+                if check_agent_health():
+                    print("\n✅ Monitoring agent is running and healthy")
+                else:
+                    print("\n❌ Monitoring agent appears to be down!")
+                    print("   Check the terminal where you started the session.")
+                    print("   You may need to restart the AI Buddy session.")
+                continue
             elif not prompt:
                 continue
             
@@ -132,8 +168,14 @@ def main():
                 except Exception as e:
                     print(f"\n⚠️  Error reading response: {e}")
             else:
-                print("\n⚠️  No response received. Is the monitoring agent running?")
-                print("   Check the terminal where you started the session.")
+                if not check_agent_health():
+                    print("\n❌ The monitoring agent is not responding.")
+                    print("   Please check the monitoring agent terminal for errors.")
+                    print("   You may need to restart the AI Buddy session.")
+                else:
+                    print("\n⚠️  No response received despite agent being healthy.")
+                    print("   There might be an issue with the Gemini API.")
+                    print("   Check the monitoring agent terminal for error details.")
         
         except KeyboardInterrupt:
             print("\n\n👋 Interrupted. Goodbye!")
