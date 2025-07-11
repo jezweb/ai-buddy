@@ -143,23 +143,34 @@ chmod +x "$SCRIPT_DIR/start-buddy-session.sh"
 chmod +x "$SCRIPT_DIR/setup.sh"
 echo -e "✓ Scripts are now executable"
 
+# Check if API key is configured
+API_KEY_CONFIGURED=true
+if [ ! -f "$SCRIPT_DIR/.env" ] || grep -q "your-gemini-api-key-here" "$SCRIPT_DIR/.env" 2>/dev/null; then
+    API_KEY_CONFIGURED=false
+fi
+
 # Final message
 echo ""
 echo -e "${GREEN}✅ Setup complete!${NC}"
 echo ""
-echo -e "${BLUE}To start AI Coding Buddy:${NC}"
-if [ "$USE_VENV" = true ]; then
-    echo -e "  1. Activate the virtual environment (if not already active):"
-    echo -e "     ${YELLOW}source .ai-buddy/venv/bin/activate${NC}"
-    echo -e "  2. Run the launcher:"
-    echo -e "     ${YELLOW}./.ai-buddy/start-buddy-session.sh${NC}"
-else
-    echo -e "  ${YELLOW}./.ai-buddy/start-buddy-session.sh${NC}"
+
+# Offer to start immediately if API key is configured
+if [ "$API_KEY_CONFIGURED" = true ]; then
+    read -p "Would you like to start AI Coding Buddy now? [Y/n] " -n 1 -r
+    echo ""
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        echo ""
+        exec "$SCRIPT_DIR/start-buddy-session.sh"
+    fi
 fi
 
-if [ ! -f "$SCRIPT_DIR/.env" ] || grep -q "your-gemini-api-key-here" "$SCRIPT_DIR/.env" 2>/dev/null; then
+# Show how to start later
+echo -e "${BLUE}To start AI Coding Buddy later, just run:${NC}"
+echo -e "  ${YELLOW}./.ai-buddy/start-buddy-session.sh${NC}"
+
+if [ "$API_KEY_CONFIGURED" = false ]; then
     echo ""
-    echo -e "${YELLOW}⚠️  Remember to add your Gemini API key to .ai-buddy/.env${NC}"
+    echo -e "${YELLOW}⚠️  Remember to add your Gemini API key to .ai-buddy/.env first${NC}"
 fi
 
 echo ""

@@ -6,6 +6,21 @@ echo "🚀 Starting AI Coding Buddy Session..."
 AI_BUDDY_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$AI_BUDDY_DIR/.." && pwd)"
 
+# --- Check and activate virtual environment if it exists ---
+VENV_DIR="$AI_BUDDY_DIR/venv"
+PYTHON_CMD="python3"
+
+if [ -d "$VENV_DIR" ]; then
+    echo "  -> Using virtual environment..."
+    if [ -f "$VENV_DIR/bin/python" ]; then
+        # Linux/macOS
+        PYTHON_CMD="$VENV_DIR/bin/python"
+    elif [ -f "$VENV_DIR/Scripts/python.exe" ]; then
+        # Windows
+        PYTHON_CMD="$VENV_DIR/Scripts/python.exe"
+    fi
+fi
+
 # --- Configuration ---
 SESSION_ID=$(date +%Y%m%d_%H%M%S)
 SESSIONS_DIR="${SESSIONS_DIR:-$AI_BUDDY_DIR/sessions}"
@@ -144,9 +159,9 @@ if ! command -v python3 &> /dev/null; then
 fi
 
 # Check if required Python packages are installed
-python3 -c "import google.genai" 2>/dev/null || {
+$PYTHON_CMD -c "import google.genai" 2>/dev/null || {
     echo "❌ Error: Required Python packages not installed."
-    echo "   Please run: pip install -r $AI_BUDDY_DIR/requirements.txt"
+    echo "   Please run: $PYTHON_CMD -m pip install -r $AI_BUDDY_DIR/requirements.txt"
     exit 1
 }
 
@@ -156,7 +171,7 @@ create_repo_mix
 echo "  -> Launching Monitoring Agent in the background..."
 # Pass the file paths to the agent
 cd "$AI_BUDDY_DIR"
-python3 monitoring_agent.py --context_file "$CONTEXT_FILE" --log_file "$CLAUDE_LOG_FILE" &
+$PYTHON_CMD monitoring_agent.py --context_file "$CONTEXT_FILE" --log_file "$CLAUDE_LOG_FILE" &
 AGENT_PID=$!
 
 # Give the agent a moment to start
@@ -171,7 +186,7 @@ fi
 echo "  -> Opening Buddy Chat UI and Claude Session in new terminals..."
 
 # Open Buddy Chat UI
-open_terminal "python3 $AI_BUDDY_DIR/buddy_chat_ui.py" "AI Buddy Chat" "$AI_BUDDY_DIR"
+open_terminal "$PYTHON_CMD $AI_BUDDY_DIR/buddy_chat_ui.py" "AI Buddy Chat" "$AI_BUDDY_DIR"
 
 # Open Claude session with script recording
 # Check which claude command is available
