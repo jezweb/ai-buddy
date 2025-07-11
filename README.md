@@ -44,7 +44,28 @@ The system consists of three main components that work together:
 
 AI Coding Buddy is designed to work from a `.ai-buddy` subfolder within your project, keeping it separate from your project's code and avoiding conflicts with existing `.env` files.
 
-### Option 1: Install in an existing project
+### Quick Setup (Recommended)
+
+1. Navigate to your project directory:
+   ```bash
+   cd /path/to/your/project
+   ```
+
+2. Clone and setup AI Buddy:
+   ```bash
+   git clone https://github.com/jezweb/ai-buddy .ai-buddy
+   ./.ai-buddy/setup.sh
+   ```
+
+That's it! The setup script will:
+- Check Python installation
+- Install dependencies (optionally in a virtual environment)
+- Configure your API key
+- Set up all permissions
+
+### Manual Setup
+
+If you prefer to set up manually:
 
 1. Navigate to your project directory:
    ```bash
@@ -71,16 +92,6 @@ AI Coding Buddy is designed to work from a `.ai-buddy` subfolder within your pro
    ```bash
    chmod +x .ai-buddy/start-buddy-session.sh
    ```
-
-### Option 2: Test with the included demo
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/jezweb/ai-buddy
-   cd ai-buddy
-   ```
-
-2. Follow steps 3-5 from Option 1 above.
 
 ## Usage
 
