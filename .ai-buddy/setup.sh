@@ -13,7 +13,25 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# This script can be run from either:
+# 1. Project root: ./.ai-buddy/setup.sh
+# 2. Inside .ai-buddy: ./setup.sh
+
+CURRENT_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CURRENT_SCRIPT_NAME="$(basename "$CURRENT_SCRIPT_DIR")"
+
+# Determine SCRIPT_DIR (the .ai-buddy directory) based on where we're running from
+if [ "$CURRENT_SCRIPT_NAME" = ".ai-buddy" ]; then
+    # Running from project root (case 1)
+    SCRIPT_DIR="$CURRENT_SCRIPT_DIR"
+elif [ -f "$CURRENT_SCRIPT_DIR/setup.sh" ] && [ -f "$CURRENT_SCRIPT_DIR/start-buddy-session.sh" ]; then
+    # We're already in .ai-buddy (case 2)
+    SCRIPT_DIR="$CURRENT_SCRIPT_DIR"
+else
+    # Fallback - try to find .ai-buddy directory
+    echo "⚠️  Warning: Could not determine .ai-buddy directory location"
+    SCRIPT_DIR="$CURRENT_SCRIPT_DIR"
+fi
 
 echo -e "${BLUE}🚀 AI Coding Buddy Setup${NC}"
 echo -e "${BLUE}========================${NC}"

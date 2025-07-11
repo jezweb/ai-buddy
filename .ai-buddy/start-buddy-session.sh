@@ -3,8 +3,62 @@
 echo "🚀 Starting AI Coding Buddy Session..."
 
 # --- Get AI Buddy directory and project root ---
-AI_BUDDY_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="$(cd "$AI_BUDDY_DIR/.." && pwd)"
+# This script can be run from either:
+# 1. Project root: ./.ai-buddy/start-buddy-session.sh
+# 2. Inside .ai-buddy: ./start-buddy-session.sh
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_NAME="$(basename "$SCRIPT_DIR")"
+
+# Determine AI_BUDDY_DIR and PROJECT_ROOT based on where we're running from
+if [ "$SCRIPT_NAME" = ".ai-buddy" ]; then
+    # Running from project root (case 1)
+    AI_BUDDY_DIR="$SCRIPT_DIR"
+    PROJECT_ROOT="$(cd "$AI_BUDDY_DIR/.." && pwd)"
+elif [ -f "$SCRIPT_DIR/../.ai-buddy/start-buddy-session.sh" ]; then
+    # We're inside .ai-buddy but there's another .ai-buddy above us
+    # This handles nested or unusual structures
+    AI_BUDDY_DIR="$SCRIPT_DIR"
+    PROJECT_ROOT="$(cd "$AI_BUDDY_DIR/.." && pwd)"
+else
+    # Running from inside .ai-buddy (case 2)
+    # Look for project root by finding where .ai-buddy lives
+    CURRENT_DIR="$SCRIPT_DIR"
+    while [ "$CURRENT_DIR" != "/" ]; do
+        if [ "$(basename "$CURRENT_DIR")" = ".ai-buddy" ] && [ -f "$CURRENT_DIR/start-buddy-session.sh" ]; then
+            AI_BUDDY_DIR="$CURRENT_DIR"
+            PROJECT_ROOT="$(cd "$CURRENT_DIR/.." && pwd)"
+            break
+        fi
+        CURRENT_DIR="$(cd "$CURRENT_DIR/.." && pwd)"
+    done
+    
+    # Fallback if we couldn't find .ai-buddy
+    if [ -z "$AI_BUDDY_DIR" ]; then
+        AI_BUDDY_DIR="$SCRIPT_DIR"
+        PROJECT_ROOT="$(cd "$AI_BUDDY_DIR/.." && pwd)"
+    fi
+fi
+
+# --- Validate project root ---
+# Ensure we're not in system directories or trash
+if [[ "$PROJECT_ROOT" == "/home/"* ]] && [[ "$PROJECT_ROOT" == *"/.local/share/Trash/"* ]]; then
+    echo "❌ Error: Detected project root in Trash folder: $PROJECT_ROOT"
+    echo "   Please run this script from your actual project directory:"
+    echo "   cd /path/to/your/project && ./.ai-buddy/start-buddy-session.sh"
+    exit 1
+fi
+
+if [[ "$PROJECT_ROOT" == "/" ]] || [[ "$PROJECT_ROOT" == "/home" ]] || [[ "$PROJECT_ROOT" == "/usr" ]] || [[ "$PROJECT_ROOT" == "/etc" ]]; then
+    echo "❌ Error: Invalid project root detected: $PROJECT_ROOT"
+    echo "   Please run this script from your actual project directory:"
+    echo "   cd /path/to/your/project && ./.ai-buddy/start-buddy-session.sh"
+    exit 1
+fi
+
+# Debug output
+echo "  -> AI Buddy directory: $AI_BUDDY_DIR"
+echo "  -> Project root: $PROJECT_ROOT"
 
 # --- Check and activate virtual environment if it exists ---
 VENV_DIR="$AI_BUDDY_DIR/venv"
@@ -64,7 +118,6 @@ find_linux_terminal() {
 # --- Function to Create "Repo Mix" ---
 create_repo_mix() {
     echo "  -> Generating 'repo mix' from project files..."
-    echo "  -> Project root: $PROJECT_ROOT"
     
     # Clear the file if it exists
     > "$CONTEXT_FILE"
