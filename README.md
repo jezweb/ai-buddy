@@ -7,8 +7,17 @@ This project is a prototype for an AI-powered coding assistant. It allows a deve
 The system consists of three main components that work together:
 
 1.  **The Launcher (`start-buddy-session.sh`):** A shell script that initializes the entire environment. It creates a "repo mix" of the project's source code, starts the monitoring agent in the background, and launches both the user's chat UI and the recorded Claude session.
-2.  **The Monitoring Agent (`monitoring_agent.py`):** The brains of the operation. This Python script runs in the background, watching the live session log. When prompted by the user, it uploads the project code and the session log to the Gemini API and returns the AI's response.
+2.  **The Monitoring Agent (`monitoring_agent.py`):** The brains of the operation. This Python script runs in the background, watching the live session log. When prompted by the user, it sends the entire project code and the session log to the Gemini API and returns the AI's response.
 3.  **The Buddy Chat UI (`buddy_chat_ui.py`):** A simple, dedicated terminal interface where the developer interacts with the "senior dev" (Gemini).
+
+### How Gemini Sees Your Code
+
+When you start AI Buddy, it creates a "repo mix" - a single file containing ALL your project's source code. This means Gemini has complete visibility into:
+- Every source file in your project
+- Your entire Claude session history
+- Real-time changes (if hooks are enabled)
+
+This comprehensive context is why Gemini can provide such informed advice about your project!
 
 ### Text-Based Architecture Diagram
 
@@ -54,14 +63,15 @@ AI Coding Buddy is designed to work from a `.ai-buddy` subfolder within your pro
 2. Clone and setup AI Buddy:
    ```bash
    git clone https://github.com/jezweb/ai-buddy .ai-buddy
-   ./.ai-buddy/setup.sh
+   ./.ai-buddy/full-setup.sh
    ```
 
-That's it! The setup script will:
+That's it! The full setup script will:
 - Check Python installation
 - Install dependencies (optionally in a virtual environment)
 - Configure your API key
 - Set up all permissions
+- Optionally install Claude Code hooks for enhanced tracking
 
 ### Manual Setup
 
