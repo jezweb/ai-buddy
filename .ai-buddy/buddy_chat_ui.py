@@ -8,9 +8,8 @@ from pathlib import Path
 from config import SESSIONS_DIR
 from prompt_toolkit import prompt
 from prompt_toolkit.history import FileHistory
-from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
-from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.styles import Style
+from prompt_toolkit.formatted_text import HTML
 from conversation_manager import ConversationManager
 
 REQUEST_FILE = os.path.join(SESSIONS_DIR, "buddy_request.tmp")
@@ -58,14 +57,19 @@ def print_welcome():
     print(f"{Colors.BOLD}🤖 AI Coding Buddy Chat{Colors.END}")
     print("=" * 60)
     print("Ask for help, architectural advice, or bug fixes.")
-    print("Commands:")
-    print("  - Type your question and press Enter")
-    print("  - 'exit' or 'quit' to close")
-    print("  - 'clear' to clear the screen")
-    print("  - 'help' for this message")
-    print("  - 'status' to check monitoring agent status")
-    print("  - 'changes' to view recent file changes")
-    print("  - 'history' to view conversation history")
+    print("\nCommands:")
+    print("  • Type your question and press Enter")
+    print("  • 'exit' or 'quit' to close")
+    print("  • 'clear' to clear the screen")
+    print("  • 'help' for this message")
+    print("  • 'status' to check monitoring agent status")
+    print("  • 'changes' to view recent file changes")
+    print("  • 'history' to view conversation history")
+    print("\nKeyboard Shortcuts:")
+    print("  • ↑/↓ arrows - Navigate command history")
+    print("  • Ctrl+R - Search command history")
+    print("  • Ctrl+C - Cancel current input")
+    print("  • Ctrl+D - Exit (same as 'exit')")
     print(f"\nTimeout: {timeout}s (set AI_BUDDY_TIMEOUT env var to change)")
     print("=" * 60)
     print()
@@ -293,27 +297,32 @@ def main():
     history_file = os.path.join(SESSIONS_DIR, f"chat_history_{session_id}.txt")
     history = FileHistory(history_file)
     
-    # Command completer
-    commands = ['exit', 'quit', 'clear', 'help', 'status', 'changes', 'history']
-    completer = WordCompleter(commands, ignore_case=True)
-    
-    # Custom style
+    # Custom style with more visual options
     style = Style.from_dict({
         'prompt': '#00aa00 bold',
         'input': '#ffffff',
+        # Additional style options available
+        'bottom-toolbar': '#333333 bg:#ffcc00',
+        'bottom-toolbar.text': '#333333 bg:#ffcc00',
     })
     
     while True:
         try:
+            # Create bottom toolbar with helpful shortcuts
+            def get_bottom_toolbar():
+                return HTML('<b>Shortcuts:</b> ↑/↓ history | Ctrl+R search | Ctrl+C cancel | Ctrl+D exit')
+            
             # Get user input with rich prompt
+            # Removed completer to avoid slowdown
             user_input = prompt(
                 '\n🎯 [You]: ',
                 history=history,
-                auto_suggest=AutoSuggestFromHistory(),
-                completer=completer,
                 style=style,
                 multiline=False,
-                mouse_support=True
+                vi_mode=False,  # Disable vi mode for simpler interface
+                mouse_support=False,  # Disable mouse to avoid conflicts
+                enable_history_search=True,  # Ctrl+R for history search
+                bottom_toolbar=get_bottom_toolbar
             ).strip()
             
             # Handle commands
