@@ -109,8 +109,22 @@ if [ "$HOOKS_INSTALLED" = true ]; then
 fi
 
 echo ""
-echo -e "${GREEN}To start AI Buddy:${NC}"
-echo -e "  ${CYAN}./.ai-buddy/start-buddy-session.sh${NC}"
+echo -e "${GREEN}Ready to start coding?${NC}"
 echo ""
-echo -e "${BLUE}Happy coding with your AI buddy! 🤖${NC}"
+
+# Ask if user wants to start now
+read -p "Would you like to start AI Coding Buddy now? [Y/n] " -n 1 -r
 echo ""
+
+if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+    echo ""
+    echo -e "${CYAN}Starting AI Coding Buddy...${NC}"
+    exec "$SCRIPT_DIR/start-buddy-session.sh"
+else
+    echo ""
+    echo -e "${GREEN}To start AI Buddy later:${NC}"
+    echo -e "  ${CYAN}./.ai-buddy/start-buddy-session.sh${NC}"
+    echo ""
+    echo -e "${BLUE}Happy coding with your AI buddy! 🤖${NC}"
+    echo ""
+fi

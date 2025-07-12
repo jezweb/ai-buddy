@@ -216,17 +216,7 @@ echo ""
 echo -e "${GREEN}✅ Setup complete!${NC}"
 echo ""
 
-# Offer to start immediately if API key is configured
-if [ "$API_KEY_CONFIGURED" = true ]; then
-    read -p "Would you like to start AI Coding Buddy now? [Y/n] " -n 1 -r
-    echo ""
-    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-        echo ""
-        exec "$SCRIPT_DIR/start-buddy-session.sh"
-    fi
-fi
-
-# Show how to start later
+# Show how to start
 echo -e "${BLUE}To start AI Coding Buddy later, just run:${NC}"
 echo -e "  ${YELLOW}./.ai-buddy/start-buddy-session.sh${NC}"
 
