@@ -10,6 +10,11 @@ The system consists of three main components that work together:
 2.  **The Monitoring Agent (`monitoring_agent.py`):** The brains of the operation. This Python script runs in the background, watching the live session log. When prompted by the user, it sends the entire project code and the session log to the Gemini API and returns the AI's response.
 3.  **The Buddy Chat UI (`buddy_chat_ui.py`):** A simple, dedicated terminal interface where the developer interacts with the "senior dev" (Gemini).
 
+<img width="629" height="843" alt="ai-buddy-basic-setup" src="https://github.com/user-attachments/assets/76080e20-f13b-4ba2-b0bb-cb9f24991aa6" />
+
+<img width="646" height="1245" alt="ai-buddy-full-setup" src="https://github.com/user-attachments/assets/2b90f19d-67c1-434e-8662-56a9527f7a10" />
+
+
 ### How Gemini Sees Your Code
 
 When you start AI Buddy, it creates a "repo mix" - a single file containing ALL your project's source code. This means Gemini has complete visibility into:
@@ -18,6 +23,14 @@ When you start AI Buddy, it creates a "repo mix" - a single file containing ALL 
 - Real-time changes (if hooks are enabled)
 
 This comprehensive context is why Gemini can provide such informed advice about your project!
+
+<img width="741" height="683" alt="before-claude-does-work" src="https://github.com/user-attachments/assets/e67eb404-015b-49ef-a54a-268ce6fa114e" />
+
+<img width="760" height="559" alt="claude-has-read-files" src="https://github.com/user-attachments/assets/fa452933-3b0c-41ba-a5b8-73c194b4bc4d" />
+
+<img width="904" height="745" alt="see-what-claude-did" src="https://github.com/user-attachments/assets/d96f709b-8358-4d2b-bf23-b1ad50976045" />
+
+
 
 ### Text-Based Architecture Diagram
 
