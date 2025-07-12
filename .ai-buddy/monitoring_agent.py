@@ -135,25 +135,62 @@ def main(context_file, log_file, session_id=None):
     conversation_mgr = ConversationManager(session_id, SESSIONS_DIR)
     logging.info(f"Conversation history initialized: {len(conversation_mgr.conversation_history)} previous exchanges")
     
-    # Initialize Gemini client with new SDK
+    # Initialize Gemini client with hot-reload support
     client = None
     retry_count = 0
-    while retry_count < 3:
+    max_retries = 30  # 5 minutes total (10s intervals)
+    
+    while retry_count < max_retries:
         try:
-            client = genai.Client(api_key=GEMINI_API_KEY)
+            # Reload environment variables in case user added the key
+            from dotenv import load_dotenv
+            load_dotenv(Path(__file__).parent / '.env', override=True)
+            api_key = os.getenv("GEMINI_API_KEY")
+            
+            # Check if we have a valid API key
+            if not api_key or api_key == "YOUR_GEMINI_KEY_GOES_HERE":
+                retry_count += 1
+                if retry_count == 1:
+                    print("\n⚠️  No valid Gemini API key found!")
+                    print("📝 Please add your API key to .ai-buddy/.env file:")
+                    print("   1. Edit .ai-buddy/.env")
+                    print("   2. Replace YOUR_GEMINI_KEY_GOES_HERE with your actual key")
+                    print("   3. Get a key from: https://makersuite.google.com/app/apikey")
+                    print(f"\n⏳ Waiting for API key... (checking every 10 seconds)")
+                
+                if retry_count % 6 == 0:  # Remind every minute
+                    print(f"⏳ Still waiting for API key in .env file... (attempt {retry_count}/{max_retries})")
+                
+                time.sleep(10)
+                continue
+            
+            # Try to initialize client with the API key
+            client = genai.Client(api_key=api_key)
             logging.info("✓ Gemini client initialized successfully")
+            print("\n✅ API key loaded successfully!")
             
             # Clean up any old uploaded files from previous sessions
             cleanup_old_gemini_files(client, session_id)
             
             break
+            
         except Exception as e:
             retry_count += 1
-            logging.error(f"Failed to initialize Gemini client (attempt {retry_count}/3): {e}")
-            if retry_count >= 3:
-                logging.critical("Failed to initialize Gemini client after 3 attempts. Exiting.")
+            logging.error(f"Failed to initialize Gemini client (attempt {retry_count}/{max_retries}): {e}")
+            
+            if "API key not valid" in str(e):
+                print(f"\n❌ Invalid API key. Please check your key in .env file.")
+                print(f"   Current key starts with: {api_key[:20]}..." if api_key and len(api_key) > 20 else "")
+            
+            if retry_count >= max_retries:
+                logging.critical("Failed to initialize Gemini client after all attempts. Exiting.")
+                print("\n❌ Failed to initialize after 5 minutes. Please check:")
+                print("   1. Your API key is valid")
+                print("   2. You have internet connectivity")
+                print("   3. The Gemini API is accessible")
                 sys.exit(1)
-            time.sleep(2)
+            
+            time.sleep(10)
     
     # Ensure sessions directory exists
     os.makedirs(SESSIONS_DIR, exist_ok=True)

@@ -15,13 +15,8 @@ load_dotenv(SCRIPT_DIR / '.env')
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-if not GEMINI_API_KEY:
-    raise ValueError(
-        "GEMINI_API_KEY not found. Please set it in your .env file.\n"
-        "1. Copy .env.example to .env\n"
-        "2. Add your Gemini API key to the .env file\n"
-        "3. Get your API key from: https://makersuite.google.com/app/apikey"
-    )
+# Note: We don't validate here to allow hot-reloading
+# The monitoring agent will check and retry if needed
 
 # Optional: Configure model name (can be overridden at runtime)
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
