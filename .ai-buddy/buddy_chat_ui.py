@@ -32,11 +32,23 @@ def check_agent_health():
     except:
         return False
 
+# ANSI color codes for better readability
+class Colors:
+    HEADER = '\033[95m'
+    BLUE = '\033[94m'
+    CYAN = '\033[96m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    END = '\033[0m'
+
 def print_welcome():
     """Print welcome message and instructions."""
     timeout = int(os.getenv("AI_BUDDY_TIMEOUT", "60"))
     print("=" * 60)
-    print("🤖 AI Coding Buddy Chat")
+    print(f"{Colors.BOLD}🤖 AI Coding Buddy Chat{Colors.END}")
     print("=" * 60)
     print("Ask for help, architectural advice, or bug fixes.")
     print("Commands:")
@@ -55,25 +67,120 @@ def clear_screen():
     os.system('clear' if os.name != 'nt' else 'cls')
 
 def format_response(response_text):
-    """Format the response for better readability."""
-    # Add some basic formatting
+    """Format the response for better readability with enhanced markdown support."""
+    import re
+    import textwrap
+    
     lines = response_text.split('\n')
     formatted_lines = []
+    in_code_block = False
+    terminal_width = 80  # Conservative width for better readability
     
-    for line in lines:
-        # Preserve code blocks
+    for i, line in enumerate(lines):
+        # Handle code blocks
         if line.strip().startswith('```'):
+            in_code_block = not in_code_block
+            if in_code_block:
+                formatted_lines.append('')
+                formatted_lines.append(f"{Colors.YELLOW}{'─' * 60}{Colors.END}")
+                formatted_lines.append(f"{Colors.YELLOW}{line}{Colors.END}")
+            else:
+                formatted_lines.append(f"{Colors.YELLOW}{line}{Colors.END}")
+                formatted_lines.append(f"{Colors.YELLOW}{'─' * 60}{Colors.END}")
+                formatted_lines.append('')
+            continue
+        
+        # Don't format inside code blocks
+        if in_code_block:
             formatted_lines.append(line)
-        # Add spacing for headers
+            continue
+        
+        # Handle headers with better visual separation
+        if line.strip().startswith('###'):
+            # H3 headers
+            header_text = line.strip().lstrip('#').strip()
+            formatted_lines.append('')
+            formatted_lines.append(f"{Colors.YELLOW}▓ {header_text.upper()} ▓{Colors.END}")
+            formatted_lines.append('')
+        elif line.strip().startswith('##'):
+            # H2 headers
+            header_text = line.strip().lstrip('#').strip()
+            formatted_lines.append('')
+            formatted_lines.append(f"{Colors.CYAN}{'═' * 60}{Colors.END}")
+            formatted_lines.append(f"{Colors.CYAN}{Colors.BOLD}{header_text}{Colors.END}")
+            formatted_lines.append(f"{Colors.CYAN}{'═' * 60}{Colors.END}")
         elif line.strip().startswith('#'):
-            formatted_lines.append('\n' + line)
-        # Preserve lists
-        elif line.strip().startswith(('- ', '* ', '1.', '2.', '3.')):
-            formatted_lines.append(line)
+            # H1 headers
+            header_text = line.strip().lstrip('#').strip()
+            formatted_lines.append('')
+            formatted_lines.append(f"{Colors.HEADER}{Colors.BOLD}╔{'═' * (len(header_text) + 2)}╗{Colors.END}")
+            formatted_lines.append(f"{Colors.HEADER}{Colors.BOLD}║ {header_text} ║{Colors.END}")
+            formatted_lines.append(f"{Colors.HEADER}{Colors.BOLD}╚{'═' * (len(header_text) + 2)}╝{Colors.END}")
+        
+        # Handle bullet points with better formatting
+        elif re.match(r'^\s*\*\*[^*]+\*\*:', line):
+            # Bullet points that start with bold text
+            # Extract the bold part and the rest
+            match = re.match(r'^(\s*)\*\*([^*]+)\*\*:(.*)$', line)
+            if match:
+                indent, bold_text, rest = match.groups()
+                formatted_lines.append('')
+                formatted_lines.append(f"{indent}{Colors.GREEN}►{Colors.END} {Colors.BOLD}{bold_text}:{Colors.END}{rest}")
+        elif re.match(r'^\s*\d+\.\s+\*\*[^*]+\*\*:', line):
+            # Numbered lists with bold text
+            match = re.match(r'^(\s*)(\d+)\.\s+\*\*([^*]+)\*\*:(.*)$', line)
+            if match:
+                indent, num, bold_text, rest = match.groups()
+                formatted_lines.append('')
+                formatted_lines.append(f"{indent}{Colors.BLUE}{num}.{Colors.END} {Colors.BOLD}{bold_text}:{Colors.END}{rest}")
+        elif line.strip().startswith(('- ', '* ', '•')):
+            # Regular bullet points
+            formatted_lines.append('  ' + line.strip())
+        elif re.match(r'^\s*\d+\.', line):
+            # Numbered lists
+            formatted_lines.append('  ' + line.strip())
+        
+        # Handle lines with just bold text
+        elif '**' in line:
+            # Convert **text** to bold colored text
+            formatted_line = re.sub(r'\*\*([^*]+)\*\*', rf'{Colors.BOLD}\1{Colors.END}', line)
+            # Wrap long lines
+            if len(formatted_line) > terminal_width:
+                wrapped = textwrap.fill(formatted_line, width=terminal_width, 
+                                      break_long_words=False, break_on_hyphens=False)
+                formatted_lines.extend(wrapped.split('\n'))
+            else:
+                formatted_lines.append(formatted_line)
+        
+        # Empty lines
+        elif not line.strip():
+            # Don't add too many empty lines
+            if formatted_lines and formatted_lines[-1] != '':
+                formatted_lines.append('')
+        
+        # Regular text
         else:
-            formatted_lines.append(line)
+            # Wrap long lines for better readability
+            if len(line) > terminal_width:
+                wrapped = textwrap.fill(line, width=terminal_width, 
+                                      break_long_words=False, break_on_hyphens=False)
+                formatted_lines.extend(wrapped.split('\n'))
+            else:
+                formatted_lines.append(line)
     
-    return '\n'.join(formatted_lines)
+    # Clean up excessive empty lines
+    result = []
+    prev_empty = False
+    for line in formatted_lines:
+        if line == '':
+            if not prev_empty:
+                result.append(line)
+            prev_empty = True
+        else:
+            result.append(line)
+            prev_empty = False
+    
+    return '\n'.join(result)
 
 def wait_for_response():
     """Wait for response with animated indicator and progress feedback."""
@@ -260,11 +367,17 @@ def main():
                     
                     os.remove(RESPONSE_FILE)
                     
-                    print("\n" + "─" * 60)
-                    print("🧠 [Gemini]:")
-                    print("─" * 60)
+                    # Format and display the response with enhanced styling
+                    print("")
+                    print(f"{Colors.CYAN}{'━' * 60}{Colors.END}")
+                    print(f"{Colors.CYAN}🧠 GEMINI RESPONSE{Colors.END}")
+                    print(f"{Colors.CYAN}{'━' * 60}{Colors.END}")
+                    print("")
                     print(format_response(response_text))
-                    print("─" * 60)
+                    print("")
+                    print(f"{Colors.CYAN}{'━' * 60}{Colors.END}")
+                    print(f"{Colors.CYAN}END OF RESPONSE{Colors.END}")
+                    print(f"{Colors.CYAN}{'━' * 60}{Colors.END}")
                     
                 except Exception as e:
                     print(f"\n⚠️  Error reading response: {e}")
