@@ -227,17 +227,17 @@ Please provide a thoughtful, actionable response that considers both the project
                             with open(context_path, 'w', encoding='utf-8') as f:
                                 f.write(project_context)
                             
-                            uploaded_context = genai.upload_file(path=context_path)
+                            uploaded_context = client.files.upload(file=context_path)
                             uploaded_files.append(uploaded_context)
                             os.remove(context_path)  # Clean up temp file
                             
                             # Adjust prompt to reference uploaded file
                             prompt = prompt.replace(project_context, "[Project context uploaded as file - see attached]")
                             
-                            # Call with uploaded file
+                            # Call with uploaded file (file first, then prompt)
                             response = client.models.generate_content(
                                 model=GEMINI_MODEL,
-                                contents=[prompt, uploaded_context]
+                                contents=[uploaded_context, prompt]
                             )
                         else:
                             # Small enough to include inline
@@ -246,13 +246,10 @@ Please provide a thoughtful, actionable response that considers both the project
                                 contents=prompt
                             )
                     finally:
-                        # Clean up uploaded files
-                        for file in uploaded_files:
-                            try:
-                                genai.delete_file(file.name)
-                                logging.info(f"Deleted uploaded file: {file.name}")
-                            except Exception as e:
-                                logging.warning(f"Could not delete uploaded file: {e}")
+                        # Note: Uploaded files are automatically deleted after 48 hours
+                        # No need to manually delete them
+                        if uploaded_files:
+                            logging.info(f"Uploaded {len(uploaded_files)} file(s) to Gemini. They will auto-delete after 48 hours.")
                     
                     # Extract text from response
                     response_text = response.text if hasattr(response, 'text') else str(response)
