@@ -121,37 +121,33 @@ echo -e "✓ Dependencies installed"
 echo ""
 if [ -f "$SCRIPT_DIR/.env" ]; then
     echo -e "${GREEN}✓ .env file already exists${NC}"
-    read -p "Would you like to update your Gemini API key? [y/N] " -n 1 -r
-    echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        UPDATE_KEY=true
-    else
-        UPDATE_KEY=false
-    fi
 else
-    echo -e "${YELLOW}Setting up configuration...${NC}"
+    echo -e "${YELLOW}Creating configuration file...${NC}"
     cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/.env"
-    UPDATE_KEY=true
+    echo -e "${GREEN}✓ Created .env from template${NC}"
 fi
 
-# Handle API key setup
-if [ "$UPDATE_KEY" = true ]; then
-    echo ""
-    echo "To get your Gemini API key, visit: https://makersuite.google.com/app/apikey"
-    read -p "Enter your Gemini API key (or press Enter to skip): " API_KEY
-    
-    if [ ! -z "$API_KEY" ]; then
-        # Update .env file with the API key
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            # macOS
-            sed -i '' "s/GEMINI_API_KEY=\".*\"/GEMINI_API_KEY=\"$API_KEY\"/" "$SCRIPT_DIR/.env"
-        else
-            # Linux
-            sed -i "s/GEMINI_API_KEY=\".*\"/GEMINI_API_KEY=\"$API_KEY\"/" "$SCRIPT_DIR/.env"
-        fi
-        echo -e "${GREEN}✓ API key configured${NC}"
+# Check if API key needs to be configured
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    if grep -q "YOUR_GEMINI_KEY_GOES_HERE" "$SCRIPT_DIR/.env" 2>/dev/null; then
+        echo ""
+        echo -e "${YELLOW}⚠️  IMPORTANT: Gemini API key not configured!${NC}"
+        echo ""
+        echo -e "${BLUE}To set up your API key:${NC}"
+        echo -e "1. Get your API key from: ${CYAN}https://makersuite.google.com/app/apikey${NC}"
+        echo -e "2. Edit the file: ${CYAN}$SCRIPT_DIR/.env${NC}"
+        echo -e "3. Replace ${YELLOW}YOUR_GEMINI_KEY_GOES_HERE${NC} with your actual API key"
+        echo ""
+        API_KEY_CONFIGURED=false
     else
-        echo -e "${YELLOW}⚠️  Skipped API key configuration. You'll need to edit .ai-buddy/.env manually.${NC}"
+        # Check if it's the old placeholder or empty
+        if grep -q "your-gemini-api-key-here" "$SCRIPT_DIR/.env" 2>/dev/null; then
+            echo ""
+            echo -e "${YELLOW}⚠️  API key needs to be updated in .env file${NC}"
+            API_KEY_CONFIGURED=false
+        else
+            API_KEY_CONFIGURED=true
+        fi
     fi
 fi
 
@@ -205,11 +201,7 @@ chmod +x "$SCRIPT_DIR/start-buddy-session.sh"
 chmod +x "$SCRIPT_DIR/setup.sh"
 echo -e "✓ Scripts are now executable"
 
-# Check if API key is configured
-API_KEY_CONFIGURED=true
-if [ ! -f "$SCRIPT_DIR/.env" ] || grep -q "your-gemini-api-key-here" "$SCRIPT_DIR/.env" 2>/dev/null; then
-    API_KEY_CONFIGURED=false
-fi
+# Note: API_KEY_CONFIGURED is already set in the section above
 
 # Final message
 echo ""
