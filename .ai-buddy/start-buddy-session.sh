@@ -182,51 +182,19 @@ find_linux_terminal() {
     fi
 }
 
-# --- Function to Create "Repo Mix" ---
-create_repo_mix() {
-    echo "  -> Generating 'repo mix' from project files..."
+# --- Function to Create "Repo-Blob" ---
+create_repo_blob() {
+    echo "  -> Generating 'repo-blob' from project files..."
     
-    # Clear the file if it exists
-    > "$CONTEXT_FILE"
+    # Use the Python module to generate the repo-blob
+    $PYTHON_CMD "$AI_BUDDY_DIR/repo_blob_generator.py" "$PROJECT_ROOT" "$CONTEXT_FILE"
     
-    # Add project metadata
-    echo "=== PROJECT: $(basename "$PROJECT_ROOT") ===" >> "$CONTEXT_FILE"
-    echo "=== Generated: $(date) ===" >> "$CONTEXT_FILE"
-    echo "=== Root: $PROJECT_ROOT ===" >> "$CONTEXT_FILE"
-    echo "" >> "$CONTEXT_FILE"
-    
-    # Change to project root for scanning
-    cd "$PROJECT_ROOT"
-    
-    # Check if git is initialized
-    if [ -d .git ]; then
-        # Use git to list all tracked files, respecting .gitignore
-        git ls-files | while read -r file; do
-            # Skip AI Buddy files, session files, and binary files
-            if [[ "$file" == .ai-buddy/* || "$file" == *.pyc || "$file" == .env* ]]; then
-                continue
-            fi
-            
-            # Check if file is text (not binary)
-            if file "$file" | grep -q "text"; then
-                echo "--- START FILE: $file ---" >> "$CONTEXT_FILE"
-                cat "$file" >> "$CONTEXT_FILE" 2>/dev/null || echo "[Could not read file]" >> "$CONTEXT_FILE"
-                echo -e "\n--- END FILE: $file ---\n" >> "$CONTEXT_FILE"
-            fi
-        done
+    if [ $? -eq 0 ]; then
+        echo "  -> 'Repo-blob' created at $CONTEXT_FILE"
     else
-        # If no git, include Python files and other text files
-        echo "  -> No git repository found. Including Python and text files..."
-        find . -type f \( -name "*.py" -o -name "*.txt" -o -name "*.md" -o -name "*.sh" \) \
-            -not -path "./.ai-buddy/*" -not -path "./.git/*" -not -path "./__pycache__/*" \
-            -not -name ".env*" 2>/dev/null | while read -r file; do
-            echo "--- START FILE: $file ---" >> "$CONTEXT_FILE"
-            cat "$file" >> "$CONTEXT_FILE" 2>/dev/null || echo "[Could not read file]" >> "$CONTEXT_FILE"
-            echo -e "\n--- END FILE: $file ---\n" >> "$CONTEXT_FILE"
-        done
+        echo "  -> Error: Failed to create repo-blob"
+        return 1
     fi
-    
-    echo "  -> 'Repo mix' created at $CONTEXT_FILE"
 }
 
 # --- Function to open terminal based on platform ---
@@ -285,11 +253,11 @@ $PYTHON_CMD -c "import google.genai" 2>/dev/null || {
     exit 1
 }
 
-# Create the repo mix (skip if resuming and context already exists)
+# Create the repo-blob (skip if resuming and context already exists)
 if [ "$RESUME_MODE" = true ] && [ -f "$CONTEXT_FILE" ]; then
     echo "  -> Using existing project context from resumed session"
 else
-    create_repo_mix
+    create_repo_blob
 fi
 
 # Register session with session manager

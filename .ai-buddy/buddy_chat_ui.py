@@ -17,6 +17,7 @@ RESPONSE_FILE = os.path.join(SESSIONS_DIR, "buddy_response.tmp")
 PROCESSING_FILE = os.path.join(SESSIONS_DIR, "buddy_processing.tmp")
 HEARTBEAT_FILE = os.path.join(SESSIONS_DIR, "buddy_heartbeat.tmp")
 CHANGES_LOG = os.path.join(SESSIONS_DIR, "changes.log")
+REFRESH_REQUEST_FILE = os.path.join(SESSIONS_DIR, "buddy_refresh_request.tmp")
 
 def check_agent_health():
     """Check if monitoring agent is alive by checking heartbeat and processing state."""
@@ -65,6 +66,7 @@ def print_welcome():
     print("  • 'status' to check monitoring agent status")
     print("  • 'changes' to view recent file changes")
     print("  • 'history' to view conversation history")
+    print("  • 'refresh' to regenerate the repo-blob (updates AI's project context)")
     print("\nKeyboard Shortcuts:")
     print("  • ↑/↓ arrows - Navigate command history")
     print("  • Ctrl+R - Search command history")
@@ -410,6 +412,40 @@ def main():
                 
                 print("-" * 60)
                 continue
+            elif user_input.lower() == 'refresh':
+                print("\n🔄 Refreshing repo-blob...")
+                print("This will update the AI's understanding of your project structure and files.")
+                
+                # Create refresh request file for monitoring agent
+                try:
+                    Path(REFRESH_REQUEST_FILE).touch()
+                    print("⏳ Refresh request sent to monitoring agent...")
+                    
+                    # Wait for refresh to complete (with timeout)
+                    refresh_timeout = 30  # 30 seconds timeout
+                    start_time = time.time()
+                    
+                    while os.path.exists(REFRESH_REQUEST_FILE):
+                        if time.time() - start_time > refresh_timeout:
+                            print("⚠️  Refresh timed out. The monitoring agent might be busy.")
+                            try:
+                                os.remove(REFRESH_REQUEST_FILE)
+                            except:
+                                pass
+                            break
+                        
+                        elapsed = int(time.time() - start_time)
+                        print(f"\r⏳ Refreshing... ({elapsed}s)", end='', flush=True)
+                        time.sleep(0.5)
+                    else:
+                        # Refresh completed successfully
+                        print(f"\r✅ Repo-blob refreshed successfully! ({int(time.time() - start_time)}s)      ")
+                        print("The AI now has updated context about your project.")
+                        
+                except Exception as e:
+                    print(f"❌ Error requesting refresh: {e}")
+                
+                continue
             elif not user_input:
                 continue
             
@@ -465,7 +501,7 @@ def main():
             print("   You can continue typing or 'exit' to quit.")
     
     # Cleanup on exit
-    for temp_file in [REQUEST_FILE, RESPONSE_FILE]:
+    for temp_file in [REQUEST_FILE, RESPONSE_FILE, REFRESH_REQUEST_FILE]:
         if os.path.exists(temp_file):
             try:
                 os.remove(temp_file)

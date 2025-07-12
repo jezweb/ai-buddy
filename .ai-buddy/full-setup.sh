@@ -104,7 +104,7 @@ fi
 
 echo ""
 echo -e "${BLUE}How AI Buddy works:${NC}"
-echo -e "  1. Creates a 'repo mix' with ALL your project files"
+echo -e "  1. Creates a 'repo-blob' with ALL your project files"
 echo -e "  2. Records your Claude session in real-time"
 echo -e "  3. Sends both to Gemini when you ask questions"
 echo -e "  4. Gemini sees your ENTIRE codebase + session history!"

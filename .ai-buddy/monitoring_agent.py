@@ -10,6 +10,7 @@ from pathlib import Path
 from google import genai
 from config import GEMINI_API_KEY, GEMINI_MODEL, SESSIONS_DIR, POLLING_INTERVAL
 from conversation_manager import ConversationManager
+from repo_blob_generator import generate_repo_blob
 
 # Simple file-based IPC (Inter-Process Communication)
 REQUEST_FILE = os.path.join(SESSIONS_DIR, "buddy_request.tmp")
@@ -17,6 +18,7 @@ RESPONSE_FILE = os.path.join(SESSIONS_DIR, "buddy_response.tmp")
 PROCESSING_FILE = os.path.join(SESSIONS_DIR, "buddy_processing.tmp")
 HEARTBEAT_FILE = os.path.join(SESSIONS_DIR, "buddy_heartbeat.tmp")
 CHANGES_LOG = os.path.join(SESSIONS_DIR, "changes.log")
+REFRESH_REQUEST_FILE = os.path.join(SESSIONS_DIR, "buddy_refresh_request.tmp")
 
 # Setup logging
 LOG_FILE = os.path.join(SESSIONS_DIR, f"monitoring_agent_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
@@ -128,6 +130,34 @@ def main(context_file, log_file, session_id=None):
             if time.time() - last_heartbeat > 5:
                 update_heartbeat()
                 last_heartbeat = time.time()
+            
+            # Check for refresh request
+            if os.path.exists(REFRESH_REQUEST_FILE):
+                logging.info("Refresh request received")
+                print("\n  -> Refresh request received. Regenerating repo-blob...")
+                
+                try:
+                    # Extract project root from context file path
+                    # e.g., /path/to/.ai-buddy/sessions/project_context_20250712_140230.txt
+                    # We need to go up two directories from the context file
+                    project_root = Path(context_file).parent.parent.parent
+                    
+                    # Generate new repo-blob
+                    if generate_repo_blob(str(project_root), context_file):
+                        logging.info(f"Repo-blob refreshed successfully: {context_file}")
+                        print("  -> Repo-blob refreshed successfully!")
+                    else:
+                        logging.error("Failed to refresh repo-blob")
+                        print("  -> Failed to refresh repo-blob")
+                    
+                except Exception as e:
+                    logging.error(f"Error during refresh: {e}\n{traceback.format_exc()}")
+                    print(f"  -> Error during refresh: {e}")
+                
+                finally:
+                    # Remove the request file to signal completion
+                    if os.path.exists(REFRESH_REQUEST_FILE):
+                        os.remove(REFRESH_REQUEST_FILE)
             
             # Wait for the UI to create a request file
             if os.path.exists(REQUEST_FILE):
@@ -274,7 +304,7 @@ Please provide a thoughtful, actionable response that considers both the project
             time.sleep(POLLING_INTERVAL * 2)  # Wait longer after errors
     
     # Cleanup on exit
-    for temp_file in [REQUEST_FILE, RESPONSE_FILE, PROCESSING_FILE, HEARTBEAT_FILE]:
+    for temp_file in [REQUEST_FILE, RESPONSE_FILE, PROCESSING_FILE, HEARTBEAT_FILE, REFRESH_REQUEST_FILE]:
         if os.path.exists(temp_file):
             os.remove(temp_file)
             logging.info(f"Cleaned up {temp_file}")
