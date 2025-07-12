@@ -10,6 +10,7 @@ REQUEST_FILE = os.path.join(SESSIONS_DIR, "buddy_request.tmp")
 RESPONSE_FILE = os.path.join(SESSIONS_DIR, "buddy_response.tmp")
 PROCESSING_FILE = os.path.join(SESSIONS_DIR, "buddy_processing.tmp")
 HEARTBEAT_FILE = os.path.join(SESSIONS_DIR, "buddy_heartbeat.tmp")
+CHANGES_LOG = os.path.join(SESSIONS_DIR, "changes.log")
 
 def check_agent_health():
     """Check if monitoring agent is alive by checking heartbeat and processing state."""
@@ -44,6 +45,7 @@ def print_welcome():
     print("  - 'clear' to clear the screen")
     print("  - 'help' for this message")
     print("  - 'status' to check monitoring agent status")
+    print("  - 'changes' to view recent file changes")
     print(f"\nTimeout: {timeout}s (set AI_BUDDY_TIMEOUT env var to change)")
     print("=" * 60)
     print()
@@ -196,11 +198,47 @@ def main():
                 else:
                     print("❌ No heartbeat file found - agent may not be running")
                 
+                # Check for change tracking
+                if os.path.exists(CHANGES_LOG):
+                    try:
+                        with open(CHANGES_LOG, 'r') as f:
+                            lines = f.readlines()
+                        print(f"📝 Change tracking active: {len(lines)} events logged")
+                    except:
+                        pass
+                else:
+                    print("📝 Change tracking: Not active (Claude hooks may not be configured)")
+                
                 # Check for recent logs
                 log_files = sorted([f for f in os.listdir(SESSIONS_DIR) if f.startswith("monitoring_agent_") and f.endswith(".log")])
                 if log_files:
                     print(f"📄 Latest log: {log_files[-1]}")
                 
+                continue
+            elif prompt.lower() == 'changes':
+                print("\n📋 Recent File Changes:")
+                print("-" * 60)
+                
+                if os.path.exists(CHANGES_LOG):
+                    try:
+                        with open(CHANGES_LOG, 'r') as f:
+                            lines = f.readlines()
+                        
+                        # Show last 20 changes
+                        recent = lines[-20:] if len(lines) > 20 else lines
+                        if recent:
+                            for line in recent:
+                                print(line.rstrip())
+                        else:
+                            print("No changes recorded yet.")
+                    except Exception as e:
+                        print(f"Error reading changes: {e}")
+                else:
+                    print("Change tracking not active. To enable:")
+                    print("1. Run: ./.ai-buddy/install-hooks.sh")
+                    print("2. Restart Claude Code")
+                
+                print("-" * 60)
                 continue
             elif not prompt:
                 continue

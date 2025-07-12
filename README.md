@@ -132,6 +132,29 @@ The system uses environment variables for configuration. Copy `.ai-buddy/.env.ex
   export AI_BUDDY_TIMEOUT=120  # Wait up to 2 minutes for responses
   ```
 
+### Claude Code Integration (Optional but Recommended)
+
+AI Buddy can integrate with Claude Code hooks to track file changes in real-time. This gives Gemini perfect visibility into what Claude is modifying.
+
+To enable change tracking:
+
+1. Run the hook installer:
+   ```bash
+   ./.ai-buddy/install-hooks.sh
+   ```
+
+2. Restart Claude Code for the hooks to take effect
+
+3. In the Buddy Chat UI, use the `changes` command to view recent file modifications
+
+The hooks will track:
+- File edits and creations
+- Git operations
+- Command executions
+- Session checkpoints
+
+This provides much better context to Gemini about what's happening in your coding session!
+
 ## Platform Support
 
 - **macOS**: Fully supported with Terminal.app integration
@@ -148,7 +171,7 @@ The system uses environment variables for configuration. Copy `.ai-buddy/.env.ex
 
 *   **Visual Input:** Integrate a library like Playwright to capture screenshots or web output, allowing Gemini to "see" the front-end of a web app.
 *   **Automated Triggers:** Allow the monitoring agent to proactively offer advice when it detects common errors (e.g., Python exceptions, HTTP 500 errors) in the session log.
-*   **VCS Integration:** Automatically update the project context file when a `git commit` is made.
+*   ~~**VCS Integration:** Automatically update the project context file when a `git commit` is made.~~ ✅ Implemented via Claude hooks!
 *   **Enhanced IPC:** Replace file-based communication with sockets or message queues for better performance and reliability.
 
 ## Troubleshooting

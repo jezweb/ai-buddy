@@ -1,0 +1,48 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${AI_BUDDY_DIR}/ai-buddy-hook.sh PostToolUse"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${AI_BUDDY_DIR}/ai-buddy-hook.sh PreToolUse"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${AI_BUDDY_DIR}/ai-buddy-hook.sh Stop"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${AI_BUDDY_DIR}/ai-buddy-hook.sh Notification"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -15,6 +15,7 @@ REQUEST_FILE = os.path.join(SESSIONS_DIR, "buddy_request.tmp")
 RESPONSE_FILE = os.path.join(SESSIONS_DIR, "buddy_response.tmp")
 PROCESSING_FILE = os.path.join(SESSIONS_DIR, "buddy_processing.tmp")
 HEARTBEAT_FILE = os.path.join(SESSIONS_DIR, "buddy_heartbeat.tmp")
+CHANGES_LOG = os.path.join(SESSIONS_DIR, "changes.log")
 
 # Setup logging
 LOG_FILE = os.path.join(SESSIONS_DIR, f"monitoring_agent_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
@@ -53,6 +54,21 @@ def read_file_safely(file_path, max_size=10*1024*1024):  # 10MB limit
     except Exception as e:
         logging.error(f"Error reading file {file_path}: {e}")
         return f"[Error reading file: {e}]"
+
+def get_recent_changes():
+    """Read recent changes from the changes log if it exists."""
+    if not os.path.exists(CHANGES_LOG):
+        return None
+    
+    try:
+        # Read last 100 lines of changes log
+        with open(CHANGES_LOG, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            recent_lines = lines[-100:] if len(lines) > 100 else lines
+            return ''.join(recent_lines)
+    except Exception as e:
+        logging.error(f"Error reading changes log: {e}")
+        return None
 
 def main(context_file, log_file):
     logging.info(f"Monitoring Agent Started. PID: {os.getpid()}")
@@ -125,13 +141,17 @@ def main(context_file, log_file):
                     else:
                         session_log = "[Session log not yet created - Claude session hasn't started]"
                     
+                    # Get recent changes from Claude hooks if available
+                    recent_changes = get_recent_changes()
+                    
                     # Construct the prompt
                     prompt = f"""You are a world-class senior software architect reviewing an AI Coding Buddy project.
 
-I'm providing you with two important pieces of context:
+I'm providing you with multiple pieces of context:
 
 1. **Project Context**: All the source code files in the project
 2. **Session Log**: A live recording of the developer's coding session with Claude
+3. **Recent Changes**: Real-time tracking of files modified by Claude (if available)
 
 Please analyze these to understand the project fully, then answer my specific question.
 
@@ -140,6 +160,9 @@ Please analyze these to understand the project fully, then answer my specific qu
 
 ### SESSION LOG ###
 {session_log}
+
+### RECENT CHANGES (from Claude hooks) ###
+{recent_changes if recent_changes else "[No change tracking data available - Claude hooks may not be configured]"}
 
 ### MY QUESTION ###
 {user_question}
