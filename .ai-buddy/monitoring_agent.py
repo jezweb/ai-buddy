@@ -20,6 +20,9 @@ HEARTBEAT_FILE = os.path.join(SESSIONS_DIR, "buddy_heartbeat.tmp")
 CHANGES_LOG = os.path.join(SESSIONS_DIR, "changes.log")
 REFRESH_REQUEST_FILE = os.path.join(SESSIONS_DIR, "buddy_refresh_request.tmp")
 
+# Track uploaded files per session to enable cleanup
+uploaded_file_tracker = {}  # session_id -> file_name
+
 # Setup logging
 LOG_FILE = os.path.join(SESSIONS_DIR, f"monitoring_agent_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
 logging.basicConfig(
@@ -73,6 +76,37 @@ def get_recent_changes():
         logging.error(f"Error reading changes log: {e}")
         return None
 
+def cleanup_old_gemini_files(client, session_id=None):
+    """Clean up old uploaded files from Gemini, optionally keeping files for current session."""
+    try:
+        logging.info("Checking for old Gemini files to clean up...")
+        cleaned_count = 0
+        
+        # List all files
+        for file in client.files.list():
+            # Check if this is one of our temp context files
+            if file.name and 'temp_context_' in file.name:
+                # If we have a session_id and this file belongs to current session, skip it
+                if session_id and f"temp_context_{session_id}" in file.name:
+                    logging.info(f"Keeping current session file: {file.name}")
+                    continue
+                
+                # Otherwise, delete the old file
+                try:
+                    client.files.delete(name=file.name)
+                    logging.info(f"Deleted old file: {file.name}")
+                    cleaned_count += 1
+                except Exception as e:
+                    logging.warning(f"Could not delete file {file.name}: {e}")
+        
+        if cleaned_count > 0:
+            logging.info(f"Cleaned up {cleaned_count} old file(s)")
+        else:
+            logging.info("No old files to clean up")
+            
+    except Exception as e:
+        logging.error(f"Error during file cleanup: {e}")
+
 def main(context_file, log_file, session_id=None):
     # Extract session ID from log file name if not provided
     if not session_id:
@@ -98,6 +132,10 @@ def main(context_file, log_file, session_id=None):
         try:
             client = genai.Client(api_key=GEMINI_API_KEY)
             logging.info("✓ Gemini client initialized successfully")
+            
+            # Clean up any old uploaded files from previous sessions
+            cleanup_old_gemini_files(client, session_id)
+            
             break
         except Exception as e:
             retry_count += 1
@@ -223,6 +261,16 @@ Please provide a thoughtful, actionable response that considers both the project
                         # Upload project context if it's large
                         if len(project_context) > 50000:  # If over 50KB, use file upload
                             logging.info("Uploading project context to Gemini Files API...")
+                            
+                            # Check if we have an old uploaded file for this session
+                            if session_id in uploaded_file_tracker:
+                                old_file_name = uploaded_file_tracker[session_id]
+                                try:
+                                    client.files.delete(name=old_file_name)
+                                    logging.info(f"Deleted previous upload for session: {old_file_name}")
+                                except Exception as e:
+                                    logging.warning(f"Could not delete old file {old_file_name}: {e}")
+                            
                             context_path = os.path.join(SESSIONS_DIR, f"temp_context_{session_id}.txt")
                             with open(context_path, 'w', encoding='utf-8') as f:
                                 f.write(project_context)
@@ -230,6 +278,10 @@ Please provide a thoughtful, actionable response that considers both the project
                             uploaded_context = client.files.upload(file=context_path)
                             uploaded_files.append(uploaded_context)
                             os.remove(context_path)  # Clean up temp file
+                            
+                            # Track this upload for future cleanup
+                            uploaded_file_tracker[session_id] = uploaded_context.name
+                            logging.info(f"Tracking uploaded file: {uploaded_context.name}")
                             
                             # Adjust prompt to reference uploaded file
                             prompt = prompt.replace(project_context, "[Project context uploaded as file - see attached]")
@@ -305,6 +357,15 @@ Please provide a thoughtful, actionable response that considers both the project
         if os.path.exists(temp_file):
             os.remove(temp_file)
             logging.info(f"Cleaned up {temp_file}")
+    
+    # Clean up any uploaded files for this session
+    if session_id in uploaded_file_tracker:
+        try:
+            file_name = uploaded_file_tracker[session_id]
+            client.files.delete(name=file_name)
+            logging.info(f"Cleaned up uploaded file on exit: {file_name}")
+        except Exception as e:
+            logging.warning(f"Could not clean up uploaded file on exit: {e}")
     
     logging.info("Monitoring agent stopped")
     print("  -> Monitoring agent stopped.")
