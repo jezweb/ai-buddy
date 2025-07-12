@@ -154,6 +154,10 @@ The system uses environment variables for configuration. Copy `.ai-buddy/.env.ex
   ```bash
   export AI_BUDDY_TIMEOUT=120  # Wait up to 2 minutes for responses
   ```
+- `PROACTIVE_MONITORING`: Enable/disable proactive error detection (default: true)
+  ```bash
+  export PROACTIVE_MONITORING=false  # Disable proactive monitoring
+  ```
 
 ### Claude Code Integration (Optional but Recommended)
 
@@ -190,10 +194,52 @@ This provides much better context to Gemini about what's happening in your codin
 - Session logs in the `sessions/` directory may contain sensitive information and are also excluded
 - Never commit API keys or session data to your repository
 
+## Proactive Error Detection (NEW!)
+
+AI Buddy now includes **proactive monitoring** that watches your coding session in real-time and automatically detects errors, providing immediate suggestions for fixes.
+
+### How It Works
+
+1. **Real-time Log Monitoring**: Continuously watches your Claude session log for errors
+2. **Smart Error Detection**: Recognizes common patterns like:
+   - Python syntax errors and exceptions
+   - Import/module errors
+   - Type errors and None checks
+   - Security issues (hardcoded secrets)
+   - Performance problems
+   - Test failures
+3. **Instant Notifications**: Alerts you when critical errors are detected
+4. **Contextual Suggestions**: Provides specific fixes for each error type
+
+### Using Proactive Monitoring
+
+In the Buddy Chat UI:
+- **Automatic Notifications**: You'll see alerts when errors are detected
+- **`suggestions` command**: View all active error suggestions
+- **Smart Prioritization**: Critical security issues are shown first
+
+Example notification:
+```
+🚨 ==================================================
+⚠️  Detected 2 issue(s)
+🔴 Critical: 1
+🟡 Errors: 1
+
+💡 Quick Fix: Move api_key to environment variable
+==================================================
+```
+
+### Disabling Proactive Monitoring
+
+If you prefer to disable this feature:
+```bash
+export PROACTIVE_MONITORING=false
+```
+
 ## Future Improvements
 
 *   **Visual Input:** Integrate a library like Playwright to capture screenshots or web output, allowing Gemini to "see" the front-end of a web app.
-*   **Automated Triggers:** Allow the monitoring agent to proactively offer advice when it detects common errors (e.g., Python exceptions, HTTP 500 errors) in the session log.
+*   ~~**Automated Triggers:** Allow the monitoring agent to proactively offer advice when it detects common errors (e.g., Python exceptions, HTTP 500 errors) in the session log.~~ ✅ Implemented as Proactive Monitoring!
 *   ~~**VCS Integration:** Automatically update the project context file when a `git commit` is made.~~ ✅ Implemented via Claude hooks!
 *   **Enhanced IPC:** Replace file-based communication with sockets or message queues for better performance and reliability.
 

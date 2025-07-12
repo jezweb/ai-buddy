@@ -1,0 +1,1 @@
+"""Test fixtures for AI Buddy tests."""

@@ -301,7 +301,7 @@ def main(context_file, log_file):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--context_file", required=True)
-    parser.add_gument("--log_file", required=True)
+    parser.add_argument("--log_file", required=True)
     args = parser.parse_args()
     main(args.context_file, args.log_file)
 ```

@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 SCRIPT_DIR = Path(__file__).parent.absolute()
 
 # Load environment variables from .env file in the AI Buddy directory
-load_dotenv(SCRIPT_DIR / '.env')
+load_dotenv(SCRIPT_DIR / ".env")
 
 # IMPORTANT: Create a file named .env in the same directory
 # and add your Gemini API key like this:
