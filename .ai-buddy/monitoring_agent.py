@@ -5,12 +5,17 @@ import argparse
 import sys
 import logging
 import traceback
+import json
 from datetime import datetime
 from pathlib import Path
 from google import genai
 from config import GEMINI_API_KEY, GEMINI_MODEL, SESSIONS_DIR, POLLING_INTERVAL
 from conversation_manager import ConversationManager
 from repo_blob_generator import generate_repo_blob
+from file_operations import (
+    FileOperationResponse, FileOperationExecutor,
+    detect_file_operation_request
+)
 
 # Simple file-based IPC (Inter-Process Communication)
 REQUEST_FILE = os.path.join(SESSIONS_DIR, "buddy_request.tmp")
@@ -227,7 +232,7 @@ def main(context_file, log_file, session_id=None):
                     conversation_context = conversation_mgr.get_recent_context()
                     
                     # Construct the prompt
-                    prompt = f"""You are a world-class senior software architect reviewing an AI Coding Buddy project.
+                    base_prompt = f"""You are a world-class senior software architect reviewing an AI Coding Buddy project.
 
 I'm providing you with multiple pieces of context:
 
@@ -236,7 +241,21 @@ I'm providing you with multiple pieces of context:
 3. **Recent Changes**: Real-time tracking of files modified by Claude (if available)
 4. **Previous Conversation**: Recent exchanges from our current session
 
-Please analyze these to understand the project fully, then answer my specific question.
+Please analyze these to understand the project fully, then answer my specific question."""
+                    
+                    # Add file operation instructions if needed
+                    if is_file_operation:
+                        prompt = base_prompt + """
+
+When creating or modifying files:
+- Use relative paths from the project root
+- Provide clear descriptions for each file operation
+- Consider existing project structure and conventions
+- Include appropriate file headers, imports, and documentation
+- Set overwrite=true only when explicitly asked to replace existing files
+- Add warnings for any potential issues or considerations"""
+                    else:
+                        prompt = base_prompt
 
 ### RECENT CONVERSATION HISTORY ###
 {conversation_context}
@@ -254,6 +273,12 @@ Please analyze these to understand the project fully, then answer my specific qu
 {user_question}
 
 Please provide a thoughtful, actionable response that considers both the project code and the ongoing session."""
+                    
+                    # Check if this is a file operation request
+                    is_file_operation = detect_file_operation_request(user_question)
+                    
+                    # Extract project root from context file path
+                    project_root = Path(context_file).parent.parent.parent
                     
                     # Upload files to Gemini for better handling
                     uploaded_files = []
@@ -287,24 +312,96 @@ Please provide a thoughtful, actionable response that considers both the project
                             prompt = prompt.replace(project_context, "[Project context uploaded as file - see attached]")
                             
                             # Call with uploaded file (file first, then prompt)
-                            response = client.models.generate_content(
-                                model=GEMINI_MODEL,
-                                contents=[uploaded_context, prompt]
-                            )
+                            if is_file_operation:
+                                # Use structured output for file operations
+                                response = client.models.generate_content(
+                                    model=GEMINI_MODEL,
+                                    contents=[uploaded_context, prompt + "\n\nGenerate the requested file operations."],
+                                    config={
+                                        'response_mime_type': 'application/json',
+                                        'response_schema': FileOperationResponse
+                                    }
+                                )
+                            else:
+                                response = client.models.generate_content(
+                                    model=GEMINI_MODEL,
+                                    contents=[uploaded_context, prompt]
+                                )
                         else:
                             # Small enough to include inline
-                            response = client.models.generate_content(
-                                model=GEMINI_MODEL,
-                                contents=prompt
-                            )
+                            if is_file_operation:
+                                # Use structured output for file operations
+                                response = client.models.generate_content(
+                                    model=GEMINI_MODEL,
+                                    contents=prompt + "\n\nGenerate the requested file operations.",
+                                    config={
+                                        'response_mime_type': 'application/json',
+                                        'response_schema': FileOperationResponse
+                                    }
+                                )
+                            else:
+                                response = client.models.generate_content(
+                                    model=GEMINI_MODEL,
+                                    contents=prompt
+                                )
                     finally:
                         # Note: Uploaded files are automatically deleted after 48 hours
                         # No need to manually delete them
                         if uploaded_files:
                             logging.info(f"Uploaded {len(uploaded_files)} file(s) to Gemini. They will auto-delete after 48 hours.")
                     
-                    # Extract text from response
-                    response_text = response.text if hasattr(response, 'text') else str(response)
+                    # Process response based on type
+                    if is_file_operation:
+                        # Handle structured file operation response
+                        try:
+                            # Parse the JSON response
+                            file_ops = FileOperationResponse.model_validate_json(response.text)
+                            
+                            # Execute file operations
+                            executor = FileOperationExecutor(str(project_root))
+                            result = executor.execute_operations(file_ops)
+                            
+                            # Create user-friendly response
+                            response_lines = [f"# {file_ops.summary}\n"]
+                            
+                            if result.files_created:
+                                response_lines.append("\n## Files Created:")
+                                for f in result.files_created:
+                                    response_lines.append(f"✅ {f}")
+                            
+                            if result.files_updated:
+                                response_lines.append("\n## Files Updated:")
+                                for f in result.files_updated:
+                                    response_lines.append(f"📝 {f}")
+                            
+                            if result.files_deleted:
+                                response_lines.append("\n## Files Deleted:")
+                                for f in result.files_deleted:
+                                    response_lines.append(f"🗑️ {f}")
+                            
+                            if result.errors:
+                                response_lines.append("\n## Errors:")
+                                for e in result.errors:
+                                    response_lines.append(f"❌ {e}")
+                            
+                            if file_ops.warnings:
+                                response_lines.append("\n## Warnings:")
+                                for w in file_ops.warnings:
+                                    response_lines.append(f"⚠️ {w}")
+                            
+                            response_lines.append(f"\n\n✨ Operations completed: {len(result.operations_performed)}")
+                            response_text = "\n".join(response_lines)
+                            
+                            # Also log the operations
+                            logging.info(f"File operations completed: {json.dumps(result.model_dump(), indent=2)}")
+                            
+                        except Exception as e:
+                            # If file operations fail, return error message
+                            response_text = f"❌ Error processing file operations: {str(e)}\n\nPlease check the logs for details."
+                            logging.error(f"File operation error: {e}\n{traceback.format_exc()}")
+                    else:
+                        # Extract text from regular response
+                        response_text = response.text if hasattr(response, 'text') else str(response)
                     
                     # Write the response for the UI to pick up
                     with open(RESPONSE_FILE, 'w', encoding='utf-8') as f:
