@@ -31,3 +31,7 @@ SESSIONS_DIR = os.getenv("SESSIONS_DIR", str(SCRIPT_DIR / "sessions"))
 
 # Optional: Configure polling interval for monitoring agent (in seconds)
 POLLING_INTERVAL = float(os.getenv("POLLING_INTERVAL", "1.0"))
+
+# Smart Context Management
+SMART_CONTEXT_ENABLED = os.getenv("SMART_CONTEXT_ENABLED", "true").lower() == "true"
+MAX_CONTEXT_SIZE = int(os.getenv("MAX_CONTEXT_SIZE", "100000"))

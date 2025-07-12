@@ -9,13 +9,17 @@ import json
 from datetime import datetime
 from pathlib import Path
 from google import genai
-from config import GEMINI_API_KEY, GEMINI_MODEL, SESSIONS_DIR, POLLING_INTERVAL
+from config import (
+    GEMINI_API_KEY, GEMINI_MODEL, SESSIONS_DIR, POLLING_INTERVAL,
+    SMART_CONTEXT_ENABLED, MAX_CONTEXT_SIZE
+)
 from conversation_manager import ConversationManager
 from repo_blob_generator import generate_repo_blob
 from file_operations import (
     FileOperationResponse, FileOperationExecutor,
     detect_file_operation_request
 )
+from smart_context import SmartContextBuilder
 
 # Simple file-based IPC (Inter-Process Communication)
 REQUEST_FILE = os.path.join(SESSIONS_DIR, "buddy_request.tmp")
@@ -123,6 +127,7 @@ def main(context_file, log_file, session_id=None):
     logging.info(f"Watching context: {context_file}")
     logging.info(f"Watching log: {log_file}")
     logging.info(f"Using model: {GEMINI_MODEL}")
+    logging.info(f"Smart context: {'ENABLED' if SMART_CONTEXT_ENABLED else 'DISABLED'}")
     logging.info(f"Polling interval: {POLLING_INTERVAL}s")
     logging.info(f"Log file: {LOG_FILE}")
     
@@ -216,8 +221,8 @@ def main(context_file, log_file, session_id=None):
                 print("  -> Processing with Gemini...")
                 
                 try:
-                    # Read context files
-                    project_context = read_file_safely(context_file)
+                    # Get recent conversation context first
+                    conversation_context = conversation_mgr.get_recent_context()
                     
                     # Read session log if it exists
                     if os.path.exists(log_file):
@@ -228,8 +233,32 @@ def main(context_file, log_file, session_id=None):
                     # Get recent changes from Claude hooks if available
                     recent_changes = get_recent_changes()
                     
-                    # Get recent conversation context
-                    conversation_context = conversation_mgr.get_recent_context()
+                    # Check if smart context is enabled
+                    if SMART_CONTEXT_ENABLED:
+                        # Extract project root from context file path
+                        project_root = Path(context_file).parent.parent.parent
+                        
+                        # Use smart context builder
+                        context_builder = SmartContextBuilder(
+                            str(project_root),
+                            max_context_size=MAX_CONTEXT_SIZE
+                        )
+                        
+                        # Build optimized context
+                        project_context, included_files = context_builder.build_context(
+                            query=user_question,
+                            session_log=session_log,
+                            conversation_history=conversation_context,
+                            changes_log=recent_changes
+                        )
+                        
+                        logging.info(f"Smart context built with {len(included_files)} files")
+                        
+                        # Note: conversation_context is already included in project_context
+                        conversation_context = ""  # Avoid duplication
+                    else:
+                        # Traditional approach - read full repo-blob
+                        project_context = read_file_safely(context_file)
                     
                     # Construct the prompt
                     base_prompt = f"""You are a world-class senior software architect reviewing an AI Coding Buddy project.
@@ -256,6 +285,20 @@ When creating or modifying files:
 - Add warnings for any potential issues or considerations"""
                     else:
                         prompt = base_prompt
+                    
+                    # For smart context, the context is already included in project_context
+                    if SMART_CONTEXT_ENABLED:
+                        prompt += f"""
+
+{project_context}
+
+### MY QUESTION ###
+{user_question}
+
+Please provide a thoughtful, actionable response that considers both the project code and the ongoing session."""
+                    else:
+                        # Traditional format
+                        prompt += f"""
 
 ### RECENT CONVERSATION HISTORY ###
 {conversation_context}
