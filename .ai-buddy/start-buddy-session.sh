@@ -76,7 +76,74 @@ if [ -d "$VENV_DIR" ]; then
 fi
 
 # --- Configuration ---
-SESSION_ID=$(date +%Y%m%d_%H%M%S)
+# Check for --resume flag
+RESUME_MODE=false
+RESUME_SESSION_ID=""
+for arg in "$@"; do
+    case $arg in
+        --resume)
+            RESUME_MODE=true
+            shift
+            ;;
+        --resume=*)
+            RESUME_MODE=true
+            RESUME_SESSION_ID="${arg#*=}"
+            shift
+            ;;
+        *)
+            ;;
+    esac
+done
+
+if [ "$RESUME_MODE" = true ]; then
+    # Resume mode - list sessions and let user choose
+    echo "  -> Resume mode activated"
+    
+    # Run Python script to list sessions
+    if [ -z "$RESUME_SESSION_ID" ]; then
+        echo "  -> Listing available sessions..."
+        SESSION_INFO=$($PYTHON_CMD -c "
+import sys
+sys.path.append('$AI_BUDDY_DIR')
+from session_manager import SessionManager
+mgr = SessionManager('$AI_BUDDY_DIR/sessions')
+print(mgr.format_session_list())
+print()
+sessions = mgr.list_recent_sessions()
+if sessions:
+    print('Enter session number to resume (or press Enter for new session): ', end='')
+" 2>/dev/null)
+        
+        if [ $? -eq 0 ]; then
+            echo "$SESSION_INFO"
+            read -r SESSION_CHOICE
+            
+            if [ ! -z "$SESSION_CHOICE" ] && [ "$SESSION_CHOICE" -eq "$SESSION_CHOICE" ] 2>/dev/null; then
+                # Get session ID from choice
+                RESUME_SESSION_ID=$($PYTHON_CMD -c "
+import sys
+sys.path.append('$AI_BUDDY_DIR')
+from session_manager import SessionManager
+mgr = SessionManager('$AI_BUDDY_DIR/sessions')
+sessions = mgr.list_recent_sessions()
+if len(sessions) >= $SESSION_CHOICE > 0:
+    print(sessions[$SESSION_CHOICE - 1]['id'])
+" 2>/dev/null)
+            fi
+        fi
+    fi
+    
+    if [ ! -z "$RESUME_SESSION_ID" ]; then
+        SESSION_ID="$RESUME_SESSION_ID"
+        echo "  -> Resuming session: $SESSION_ID"
+    else
+        echo "  -> Creating new session instead"
+        SESSION_ID=$(date +%Y%m%d_%H%M%S)
+    fi
+else
+    SESSION_ID=$(date +%Y%m%d_%H%M%S)
+fi
+
 SESSIONS_DIR="${SESSIONS_DIR:-$AI_BUDDY_DIR/sessions}"
 CONTEXT_FILE="$SESSIONS_DIR/project_context_${SESSION_ID}.txt"
 CLAUDE_LOG_FILE="$SESSIONS_DIR/claude_session_${SESSION_ID}.log"
@@ -218,8 +285,24 @@ $PYTHON_CMD -c "import google.genai" 2>/dev/null || {
     exit 1
 }
 
-# Create the repo mix
-create_repo_mix
+# Create the repo mix (skip if resuming and context already exists)
+if [ "$RESUME_MODE" = true ] && [ -f "$CONTEXT_FILE" ]; then
+    echo "  -> Using existing project context from resumed session"
+else
+    create_repo_mix
+fi
+
+# Register session with session manager
+$PYTHON_CMD -c "
+import sys
+sys.path.append('$AI_BUDDY_DIR')
+from session_manager import SessionManager
+mgr = SessionManager('$AI_BUDDY_DIR/sessions')
+if '$RESUME_MODE' == 'true':
+    mgr.update_session_access('$SESSION_ID')
+else:
+    mgr.create_session('$SESSION_ID', '$PROJECT_ROOT')
+" 2>/dev/null
 
 echo "  -> Launching Monitoring Agent in the background..."
 # Pass the file paths to the agent
@@ -239,7 +322,9 @@ fi
 echo "  -> Opening Buddy Chat UI and Claude Session in new terminals..."
 
 # Open Buddy Chat UI
-open_terminal "$PYTHON_CMD $AI_BUDDY_DIR/buddy_chat_ui.py" "AI Buddy Chat" "$AI_BUDDY_DIR"
+# Pass session ID to chat UI
+export AI_BUDDY_SESSION_ID="$SESSION_ID"
+open_terminal "AI_BUDDY_SESSION_ID=$SESSION_ID $PYTHON_CMD $AI_BUDDY_DIR/buddy_chat_ui.py" "AI Buddy Chat" "$AI_BUDDY_DIR"
 
 # Open Claude session with script recording
 # Check which claude command is available

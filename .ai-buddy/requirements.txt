@@ -4,6 +4,9 @@ google-genai>=0.1.0
 # Environment variable management
 python-dotenv>=1.0.0
 
+# Terminal UI enhancements
+prompt-toolkit>=3.0.0
+
 # Optional: For better async performance
 # google-genai[aiohttp]
 

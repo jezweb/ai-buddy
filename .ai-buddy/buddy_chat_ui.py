@@ -3,8 +3,15 @@ import os
 import time
 import sys
 import subprocess
+import json
 from pathlib import Path
 from config import SESSIONS_DIR
+from prompt_toolkit import prompt
+from prompt_toolkit.history import FileHistory
+from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.styles import Style
+from conversation_manager import ConversationManager
 
 REQUEST_FILE = os.path.join(SESSIONS_DIR, "buddy_request.tmp")
 RESPONSE_FILE = os.path.join(SESSIONS_DIR, "buddy_response.tmp")
@@ -58,6 +65,7 @@ def print_welcome():
     print("  - 'help' for this message")
     print("  - 'status' to check monitoring agent status")
     print("  - 'changes' to view recent file changes")
+    print("  - 'history' to view conversation history")
     print(f"\nTimeout: {timeout}s (set AI_BUDDY_TIMEOUT env var to change)")
     print("=" * 60)
     print()
@@ -253,6 +261,20 @@ def main():
     # Ensure sessions directory exists
     os.makedirs(SESSIONS_DIR, exist_ok=True)
     
+    # Extract session ID from environment or latest session
+    session_id = os.environ.get('AI_BUDDY_SESSION_ID')
+    if not session_id:
+        # Try to find the latest session
+        try:
+            sessions = sorted([f for f in os.listdir(SESSIONS_DIR) if f.startswith("claude_session_") and f.endswith(".log")])
+            if sessions:
+                session_id = sessions[-1].replace('claude_session_', '').replace('.log', '')
+        except:
+            session_id = "unknown"
+    
+    # Initialize conversation manager
+    conversation_mgr = ConversationManager(session_id, SESSIONS_DIR) if session_id != "unknown" else None
+    
     # Clean up any stale files on start
     for temp_file in [REQUEST_FILE, RESPONSE_FILE, PROCESSING_FILE]:
         if os.path.exists(temp_file):
@@ -267,23 +289,55 @@ def main():
         print("   Run ./start-buddy-session.sh to start the system properly.")
         print()
     
+    # Set up prompt toolkit
+    history_file = os.path.join(SESSIONS_DIR, f"chat_history_{session_id}.txt")
+    history = FileHistory(history_file)
+    
+    # Command completer
+    commands = ['exit', 'quit', 'clear', 'help', 'status', 'changes', 'history']
+    completer = WordCompleter(commands, ignore_case=True)
+    
+    # Custom style
+    style = Style.from_dict({
+        'prompt': '#00aa00 bold',
+        'input': '#ffffff',
+    })
+    
     while True:
         try:
-            # Get user input
-            prompt = input("\n🎯 [You]: ").strip()
+            # Get user input with rich prompt
+            user_input = prompt(
+                '\n🎯 [You]: ',
+                history=history,
+                auto_suggest=AutoSuggestFromHistory(),
+                completer=completer,
+                style=style,
+                multiline=False,
+                mouse_support=True
+            ).strip()
             
             # Handle commands
-            if prompt.lower() in ['exit', 'quit']:
+            if user_input.lower() in ['exit', 'quit']:
                 print("\n👋 Goodbye! Happy coding!")
                 break
-            elif prompt.lower() == 'clear':
+            elif user_input.lower() == 'clear':
                 clear_screen()
                 print_welcome()
                 continue
-            elif prompt.lower() == 'help':
+            elif user_input.lower() == 'help':
                 print_welcome()
                 continue
-            elif prompt.lower() == 'status':
+            elif user_input.lower() == 'history':
+                # Show conversation history
+                print("\n📜 Conversation History:")
+                print("=" * 60)
+                if conversation_mgr:
+                    print(conversation_mgr.format_history_display())
+                else:
+                    print("No conversation manager available.")
+                print("=" * 60)
+                continue
+            elif user_input.lower() == 'status':
                 print("\n🔍 Checking system status...")
                 
                 # Check processing state
@@ -322,7 +376,7 @@ def main():
                     print(f"📄 Latest log: {log_files[-1]}")
                 
                 continue
-            elif prompt.lower() == 'changes':
+            elif user_input.lower() == 'changes':
                 print("\n📋 Recent File Changes:")
                 print("-" * 60)
                 
@@ -347,13 +401,13 @@ def main():
                 
                 print("-" * 60)
                 continue
-            elif not prompt:
+            elif not user_input:
                 continue
             
             # Send request to the agent
             try:
                 with open(REQUEST_FILE, 'w', encoding='utf-8') as f:
-                    f.write(prompt)
+                    f.write(user_input)
             except Exception as e:
                 print(f"⚠️  Error sending request: {e}")
                 continue

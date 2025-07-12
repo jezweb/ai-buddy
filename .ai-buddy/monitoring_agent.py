@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from google import genai
 from config import GEMINI_API_KEY, GEMINI_MODEL, SESSIONS_DIR, POLLING_INTERVAL
+from conversation_manager import ConversationManager
 
 # Simple file-based IPC (Inter-Process Communication)
 REQUEST_FILE = os.path.join(SESSIONS_DIR, "buddy_request.tmp")
@@ -70,13 +71,23 @@ def get_recent_changes():
         logging.error(f"Error reading changes log: {e}")
         return None
 
-def main(context_file, log_file):
+def main(context_file, log_file, session_id=None):
+    # Extract session ID from log file name if not provided
+    if not session_id:
+        # claude_session_20250712_140230.log -> 20250712_140230
+        session_id = os.path.basename(log_file).replace('claude_session_', '').replace('.log', '')
+    
     logging.info(f"Monitoring Agent Started. PID: {os.getpid()}")
+    logging.info(f"Session ID: {session_id}")
     logging.info(f"Watching context: {context_file}")
     logging.info(f"Watching log: {log_file}")
     logging.info(f"Using model: {GEMINI_MODEL}")
     logging.info(f"Polling interval: {POLLING_INTERVAL}s")
     logging.info(f"Log file: {LOG_FILE}")
+    
+    # Initialize conversation manager
+    conversation_mgr = ConversationManager(session_id, SESSIONS_DIR)
+    logging.info(f"Conversation history initialized: {len(conversation_mgr.conversation_history)} previous exchanges")
     
     # Initialize Gemini client with new SDK
     client = None
@@ -144,6 +155,9 @@ def main(context_file, log_file):
                     # Get recent changes from Claude hooks if available
                     recent_changes = get_recent_changes()
                     
+                    # Get recent conversation context
+                    conversation_context = conversation_mgr.get_recent_context()
+                    
                     # Construct the prompt
                     prompt = f"""You are a world-class senior software architect reviewing an AI Coding Buddy project.
 
@@ -152,8 +166,12 @@ I'm providing you with multiple pieces of context:
 1. **Project Context**: All the source code files in the project
 2. **Session Log**: A live recording of the developer's coding session with Claude
 3. **Recent Changes**: Real-time tracking of files modified by Claude (if available)
+4. **Previous Conversation**: Recent exchanges from our current session
 
 Please analyze these to understand the project fully, then answer my specific question.
+
+### RECENT CONVERSATION HISTORY ###
+{conversation_context}
 
 ### PROJECT CONTEXT ###
 {project_context}
@@ -169,11 +187,42 @@ Please analyze these to understand the project fully, then answer my specific qu
 
 Please provide a thoughtful, actionable response that considers both the project code and the ongoing session."""
                     
-                    # Call Gemini API with new SDK format
-                    response = client.models.generate_content(
-                        model=GEMINI_MODEL,
-                        contents=prompt
-                    )
+                    # Upload files to Gemini for better handling
+                    uploaded_files = []
+                    try:
+                        # Upload project context if it's large
+                        if len(project_context) > 50000:  # If over 50KB, use file upload
+                            logging.info("Uploading project context to Gemini Files API...")
+                            context_path = os.path.join(SESSIONS_DIR, f"temp_context_{session_id}.txt")
+                            with open(context_path, 'w', encoding='utf-8') as f:
+                                f.write(project_context)
+                            
+                            uploaded_context = genai.upload_file(path=context_path)
+                            uploaded_files.append(uploaded_context)
+                            os.remove(context_path)  # Clean up temp file
+                            
+                            # Adjust prompt to reference uploaded file
+                            prompt = prompt.replace(project_context, "[Project context uploaded as file - see attached]")
+                            
+                            # Call with uploaded file
+                            response = client.models.generate_content(
+                                model=GEMINI_MODEL,
+                                contents=[prompt, uploaded_context]
+                            )
+                        else:
+                            # Small enough to include inline
+                            response = client.models.generate_content(
+                                model=GEMINI_MODEL,
+                                contents=prompt
+                            )
+                    finally:
+                        # Clean up uploaded files
+                        for file in uploaded_files:
+                            try:
+                                genai.delete_file(file.name)
+                                logging.info(f"Deleted uploaded file: {file.name}")
+                            except Exception as e:
+                                logging.warning(f"Could not delete uploaded file: {e}")
                     
                     # Extract text from response
                     response_text = response.text if hasattr(response, 'text') else str(response)
@@ -181,6 +230,9 @@ Please provide a thoughtful, actionable response that considers both the project
                     # Write the response for the UI to pick up
                     with open(RESPONSE_FILE, 'w', encoding='utf-8') as f:
                         f.write(response_text)
+                    
+                    # Save to conversation history
+                    conversation_mgr.add_exchange(user_question, response_text)
                     
                     logging.info("Response sent to UI successfully")
                     print("  -> Response sent to UI")
